@@ -89,7 +89,7 @@ Once you realise that this architecture can:
 
 - Query a set of representations
 - Select relevant information dynamically
-- Do so in a differentiableand parallelizableway
+- Do so in a differentiable and parallelizable way
 
 **You no longer need recurrence at all!**
 
