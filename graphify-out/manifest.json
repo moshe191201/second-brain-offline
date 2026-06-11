@@ -1,0 +1,42 @@
+{
+  "/Users/moshe/Desktop/Code/Moshe Vault/raw/A Practical Guide to LLM Inference at Scale.md": {
+    "mtime": 1781103759.8600266,
+    "ast_hash": "dba0e8ed2efccbab1b2fdf43d823370c",
+    "semantic_hash": "dba0e8ed2efccbab1b2fdf43d823370c"
+  },
+  "/Users/moshe/Desktop/Code/Moshe Vault/raw/Beyond Text A Guide to Vision & TTS Finetuning.md": {
+    "mtime": 1781103759.860373,
+    "ast_hash": "8782f47c3d6980a06c6df455d6b1470d",
+    "semantic_hash": "8782f47c3d6980a06c6df455d6b1470d"
+  },
+  "/Users/moshe/Desktop/Code/Moshe Vault/raw/QLoRA Explained - How 4 Bit Quantization Unlocks Frontier Models.md": {
+    "mtime": 1781103759.860742,
+    "ast_hash": "6335d288e0cd2cab21144cd3d66699f0",
+    "semantic_hash": "6335d288e0cd2cab21144cd3d66699f0"
+  },
+  "/Users/moshe/Desktop/Code/Moshe Vault/raw/The Engineer's Guide to Supervised Finetuning.md": {
+    "mtime": 1781103759.8611262,
+    "ast_hash": "0bb2b6099706e2d2c944c12d15a2fa6e",
+    "semantic_hash": "0bb2b6099706e2d2c944c12d15a2fa6e"
+  },
+  "/Users/moshe/Desktop/Code/Moshe Vault/raw/The Finetuning Landscape - A Map of Modern LLM Training.md": {
+    "mtime": 1781104411.1307955,
+    "ast_hash": "c30c1bc02b6d8f17c090c4047c8c1ac5",
+    "semantic_hash": "c30c1bc02b6d8f17c090c4047c8c1ac5"
+  },
+  "/Users/moshe/Desktop/Code/Moshe Vault/raw/The RL Algorithm Behind DeepSeek's Reasoning Models.md": {
+    "mtime": 1781103759.8619034,
+    "ast_hash": "d84ae5b98efb55eaf1114031d33672ec",
+    "semantic_hash": "d84ae5b98efb55eaf1114031d33672ec"
+  },
+  "/Users/moshe/Desktop/Code/Moshe Vault/raw/The RLHF Landscape - Aligning LLMs Beyond SFT.md": {
+    "mtime": 1781103759.8621407,
+    "ast_hash": "731ebba95e7029b469d568909d2bd32c",
+    "semantic_hash": "731ebba95e7029b469d568909d2bd32c"
+  },
+  "/Users/moshe/Desktop/Code/Moshe Vault/raw/Understanding LoRA from First Principles.md": {
+    "mtime": 1781103759.8624008,
+    "ast_hash": "7a5b6012cd319e5fdd87770d7e06af74",
+    "semantic_hash": "7a5b6012cd319e5fdd87770d7e06af74"
+  }
+}
