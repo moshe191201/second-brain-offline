@@ -16,14 +16,20 @@ plus two independent retrieval engines built on top:
 
 ```
 Moshe Vault/
+├── CLAUDE.md       SCHEMA  — the vault contract loaded into every agent session: layer
+│                              rules, note templates, the vault-grounding rule, and the
+│                              Ingest/Query/Lint workflows. (Karpathy llm-wiki "layer 3".)
 ├── raw/            LAYER 1 — immutable source clippings (Obsidian Web Clipper output).
 │                              NEVER edited, never deleted. The evidence layer.
-├── wiki/           LAYER 2 — atomic synthesized concept notes. One idea per note,
-│                              densely wikilinked, provenance in frontmatter.
-├── index/          LAYER 3 — navigation: map of content, source registry, key takeaways.
+├── wiki/           LAYER 2 — atomic synthesized concept notes (one idea per note), plus
+│                              wiki/sources/ per-source summaries. Provenance in frontmatter.
+├── index/          LAYER 3 — navigation: _map-of-content, source-registry, key-takeaways,
+│                              and log.md (append-only ingest/analysis journal).
+├── scripts/        TOOLING — lint_vault.py: deterministic vault lint (CLAUDE.md Lint workflow).
+├── eval/           TESTS   — VAULT_TESTS.md manual checklist. NEVER a qmd collection.
 ├── graphify-out/   ENGINE A — entity/relationship knowledge graph (graph.json,
 │                              graph.html, GRAPH_REPORT.md). Queried via `graphify query`.
-└── (qmd index)     ENGINE B — hybrid BM25 + vector search over all three layers.
+└── (qmd index)     ENGINE B — hybrid BM25 + vector search over raw/, wiki/, index/ (NOT eval/).
                                Lives outside the vault in ~/.cache/qmd/. Queried via `qmd`.
 ```
 
@@ -152,6 +158,28 @@ graphify query "why does GRPO eliminate the critic model"
 ```
 
 Both engines returned correct, well-scoped results. Build declared complete.
+
+### Step 8. Karpathy llm-wiki compliance pass (schema, journal, summaries, lint, eval)
+
+A follow-up pass closed the gaps between this vault and Andrej Karpathy's llm-wiki
+pattern, adding five artifacts:
+
+- **`CLAUDE.md`** (vault root) — the schema/contract loaded into every agent session:
+  three-layer rules, note templates, safety rules, a **vault-grounding rule** (for any
+  in-domain question, always search + cite the vault; never answer from training data
+  alone, and say so explicitly when the vault lacks coverage), and the Ingest / Query /
+  Lint workflows. This is the "third layer" the original build lacked.
+- **`index/log.md`** — append-only journal (`## [date] <op> | <title>`), backfilled with
+  the 8 ingests and the build entry.
+- **`wiki/sources/` (8 files)** — one `source-summary` note per raw clipping, linked from
+  `index/source-registry.md`.
+- **`scripts/lint_vault.py`** — pure-stdlib deterministic lint (broken wikilinks, orphans,
+  unreferenced clippings, missing `sources:`, log coverage, MOC reachability, duplicate
+  stems); exits non-zero on any finding.
+- **`eval/VAULT_TESTS.md`** — manual test checklist (T0 lint · T1 known-answer · T2
+  negative controls · T3 cross-source synthesis · T4 engine smoke · T5 incremental ingest).
+  `eval/` is deliberately **never** registered as a qmd collection so gold answers cannot
+  contaminate retrieval.
 
 ---
 
@@ -292,8 +320,12 @@ ls ~/.claude/plugins/cache/qmd/qmd/0.1.0/dist/cli/qmd.js   # must exist (prebuil
 
 ```bash
 # C1. Vault skeleton — open Obsidian, create a vault, then:
-mkdir -p "<Vault>/raw" "<Vault>/wiki" "<Vault>/index"
+mkdir -p "<Vault>"/{raw,wiki,index,scripts,eval}
 cp <clippings>/*.md "<Vault>/raw/"     # raw/ is now FROZEN — never edit these files
+cp <source-vault>/CLAUDE.md "<Vault>/"             # schema + grounding rule (loaded every session)
+cp <source-vault>/scripts/lint_vault.py "<Vault>/scripts/"
+# Optionally seed eval/VAULT_TESTS.md from the source vault, then rewrite its gold
+# facts (T1–T3) for the NEW corpus — the structure carries over, the answers do not.
 ```
 
 **C2. Agent-driven path (recommended).** Start Claude Code in the vault root and prompt:
@@ -313,6 +345,7 @@ cd "<Vault>"
 qmd collection add ./raw   --name sources
 qmd collection add ./wiki  --name concepts
 qmd collection add ./index --name indices
+# NEVER: qmd collection add ./eval — gold answers must not enter retrieval.
 qmd update && qmd embed
 
 # Knowledge graph (the /graphify skill drives these via Claude Code; LLM required
@@ -327,6 +360,8 @@ qmd update && qmd embed
 ### Phase D — Verify
 
 ```bash
+python3 scripts/lint_vault.py                  # deterministic structure check — must exit 0
+qmd collection list                            # confirm eval/ is NOT among the collections
 qmd status                                     # collections present, chunks embedded
 qmd search "<term you know is in a clipping>" -n 3        # BM25 path
 qmd query $'intent: find the concept note about <X>\nlex: <exact terms>\nvec: <paraphrase>'  # hybrid path
@@ -334,10 +369,15 @@ graphify query "<conceptual question spanning two articles>"  # graph traversal 
 open graphify-out/graph.html                   # visual sanity check (8-ish communities)
 ```
 
+For a richer behavioral check, run the `eval/VAULT_TESTS.md` checklist (T0–T4): T1
+known-answer recall, T2 negative controls (the vault-grounding rule must make the agent
+say "not covered" instead of fabricating), T3 cross-source synthesis.
+
 Acceptance criteria (what "done" looked like in this build):
 - every raw clipping byte-identical to its original;
 - every wiki note has `sources:` frontmatter pointing at ≥1 raw clipping;
 - `index/_map-of-content.md` reaches every wiki note;
+- `python3 scripts/lint_vault.py` exits 0; `eval/` is absent from `qmd collection list`;
 - both query engines return the correct note/subgraph for a known-answer question.
 
 ### Ongoing maintenance (new clippings later)
@@ -347,7 +387,11 @@ Acceptance criteria (what "done" looked like in this build):
 3. Re-run the agent ingestion prompt — the skill's loop searches qmd **first** to update
    existing wiki notes instead of duplicating, then `/graphify <vault> --update` re-extracts
    only new/changed files (extraction cache makes this cheap).
-4. Add the new source to `index/source-registry.md`.
+4. Add the new source to `index/source-registry.md` and add a `wiki/sources/<slug>.md` summary.
+5. Append a `## [date] ingest | <title>` line to `index/log.md`.
+6. `python3 scripts/lint_vault.py` and fix any findings until it exits 0.
+
+(Steps 4–6 are the `CLAUDE.md` **Ingest** workflow — the single source of truth for the loop.)
 
 ---
 
@@ -382,5 +426,7 @@ graphify path "LoRA" "PagedAttention"
 graphify explain "GRPO"
 ```
 
-*Generated 2026-06-11 from the build session that produced this vault. Versions:
+*Generated 2026-06-11 from the build session that produced this vault; revised 2026-06-14
+to document the llm-wiki compliance pass (CLAUDE.md schema + grounding rule, log.md,
+wiki/sources/ summaries, scripts/lint_vault.py, eval/VAULT_TESTS.md). Versions:
 qmd 2.5.3 · graphifyy 0.8.37 · Node v26.2.0 · Python 3.12.13 · embeddinggemma-300M-Q8_0.*

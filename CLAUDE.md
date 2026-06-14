@@ -12,6 +12,17 @@
 
 `eval/` — test fixtures. **Never register as a qmd collection.**
 
+## Answering questions about this vault's domain
+
+When asked any question this vault could plausibly cover, you **MUST** consult the
+vault before answering — never answer from prior knowledge alone.
+
+1. Run the **Query** workflow below (qmd first, graphify for multi-hop) before writing an answer.
+2. Ground every claim in retrieved notes and cite the note or its raw source.
+3. If the vault does **not** cover it, say so explicitly. Do not fill the gap from
+   training data and present it as if it came from the vault. (This is exactly what
+   the T2 negative-control tests in `eval/VAULT_TESTS.md` verify.)
+
 ## Note conventions
 
 - Filename: `kebab-case.md` (concept notes), `wiki/sources/slug.md` (summaries)

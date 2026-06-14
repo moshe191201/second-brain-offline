@@ -17,7 +17,7 @@ Add a row after each complete run (T0–T4). T5 is recorded per-ingest.
 
 | Date | T0 | T1 (n/10) | T2 (n/3) | T3 (n/2) | T4 | Notes |
 |------|----|-----------|----------|----------|----|-------|
-| — | — | — | — | — | — | (first run pending) |
+| 2026-06-11 | — | 10/10 ✓ | 3/3 ✓ | 2/2 ✓ | — | T1–T3 run via qmd tool in-session (simulates fresh context). T0/T4 not run this batch. |
 
 ---
 
