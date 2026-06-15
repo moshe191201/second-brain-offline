@@ -1,0 +1,26 @@
+{
+  "claude-plugins-official": {
+    "source": {
+      "source": "github",
+      "repo": "anthropics/claude-plugins-official"
+    },
+    "installLocation": "/Users/moshe/.claude/plugins/marketplaces/claude-plugins-official",
+    "lastUpdated": "2026-06-11T18:38:40.047Z"
+  },
+  "qmd": {
+    "source": {
+      "source": "github",
+      "repo": "tobi/qmd"
+    },
+    "installLocation": "/Users/moshe/.claude/plugins/marketplaces/qmd",
+    "lastUpdated": "2026-06-09T14:17:17.207Z"
+  },
+  "obsidian-skills": {
+    "source": {
+      "source": "github",
+      "repo": "kepano/obsidian-skills"
+    },
+    "installLocation": "/Users/moshe/.claude/plugins/marketplaces/obsidian-skills",
+    "lastUpdated": "2026-06-09T14:22:21.921Z"
+  }
+}
