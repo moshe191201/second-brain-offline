@@ -210,7 +210,38 @@ def cmd_new_note(root: Path, slug: str, source: str) -> int:
     return 0
 
 
-def cmd_check(root: Path) -> int: raise NotImplementedError
+def _find_todo_markers(root: Path) -> list[Path]:
+    hits = []
+    for md in (root / "wiki").rglob("*.md"):
+        if "<!-- TODO" in md.read_text(encoding="utf-8"):
+            hits.append(md)
+    return hits
+
+
+def cmd_check(root: Path) -> int:
+    failed = False
+    # Layer 1+structural: reuse the existing lint if present.
+    lint = root / "scripts" / "lint_vault.py"
+    if lint.exists():
+        result = subprocess.run([sys.executable, str(lint)], cwd=str(root))
+        if result.returncode != 0:
+            print("vault check: lint_vault.py reported findings (see above).", file=sys.stderr)
+            failed = True
+    # Layer 2: stub-completion (deterministic proxy for "model did its job").
+    todos = _find_todo_markers(root)
+    if todos:
+        failed = True
+        print("vault check: unfilled stub / TODO marker in:", file=sys.stderr)
+        for p in todos:
+            print(f"  - {p.relative_to(root)} → fill its <!-- TODO --> body from its source.",
+                  file=sys.stderr)
+    if failed:
+        print("vault check: FAIL — fix the findings or STOP and report.", file=sys.stderr)
+        return 1
+    print("vault check: OK")
+    return 0
+
+
 def cmd_register(root: Path, *, dry_run: bool = False, runner=subprocess.run) -> int: raise NotImplementedError
 def cmd_status(root: Path) -> int: raise NotImplementedError
 
