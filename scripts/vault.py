@@ -242,7 +242,24 @@ def cmd_check(root: Path) -> int:
     return 0
 
 
-def cmd_register(root: Path, *, dry_run: bool = False, runner=subprocess.run) -> int: raise NotImplementedError
+def cmd_register(root: Path, *, dry_run: bool = False, runner=subprocess.run) -> int:
+    commands = [
+        ["qmd", "collection", "add", "./raw", "--name", "sources"],
+        ["qmd", "collection", "add", "./wiki", "--name", "concepts"],
+        ["qmd", "collection", "add", "./index", "--name", "indices"],
+        ["qmd", "update"],
+        ["qmd", "embed"],
+    ]
+    # eval/ is intentionally absent: gold answers must never enter retrieval.
+    for cmd in commands:
+        print("vault register:", " ".join(cmd))
+        if dry_run:
+            continue
+        result = runner(cmd, cwd=str(root))
+        if getattr(result, "returncode", 1) != 0:
+            print(f"vault register: command failed: {' '.join(cmd)}", file=sys.stderr)
+            return 1
+    return 0
 def cmd_status(root: Path) -> int: raise NotImplementedError
 
 

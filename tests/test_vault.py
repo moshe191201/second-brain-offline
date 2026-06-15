@@ -188,5 +188,27 @@ class TestCheck(unittest.TestCase):
             self.assertNotEqual(vault.cmd_check(v), 0)
 
 
+class TestRegister(unittest.TestCase):
+    def test_register_dry_run_excludes_eval(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            vault.cmd_scaffold(root, "V")
+            v = root / "V"
+            calls = []
+            def fake_runner(cmd, **kw):
+                calls.append(cmd)
+                class R: returncode = 0
+                return R()
+            rc = vault.cmd_register(v, runner=fake_runner)
+            self.assertEqual(rc, 0)
+            flat = " ".join(" ".join(c) for c in calls)
+            self.assertIn("collection add ./raw", flat)
+            self.assertIn("collection add ./wiki", flat)
+            self.assertIn("collection add ./index", flat)
+            self.assertNotIn("eval", flat)  # eval/ must never be registered
+            self.assertIn("qmd update", flat)
+            self.assertIn("qmd embed", flat)
+
+
 if __name__ == "__main__":
     unittest.main()
