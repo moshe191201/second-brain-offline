@@ -85,5 +85,32 @@ class TestScaffold(unittest.TestCase):
                 self.assertTrue((v / "index" / f"{stem}.md").exists(), stem)
 
 
+class TestNewNote(unittest.TestCase):
+    def _vault(self, d):
+        root = Path(d)
+        vault.cmd_scaffold(root, "V")
+        return root / "V"
+
+    def test_new_note_creates_concept_stub(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            (v / "raw" / "my-clip.md").write_text("---\ntitle: My Clip\n---\nbody\n", "utf-8")
+            rc = vault.cmd_new_note(v, "low-rank-adapters", "raw/my-clip.md")
+            self.assertEqual(rc, 0)
+            note = v / "wiki" / "low-rank-adapters.md"
+            self.assertTrue(note.exists())
+            fm, _ = vault.parse_frontmatter(note.read_text("utf-8"))
+            self.assertEqual(fm["type"], "concept")
+            self.assertEqual(fm["sources"], ["[[my-clip]]"])
+            self.assertIn("<!-- TODO", note.read_text("utf-8"))
+
+    def test_new_note_refuses_overwrite(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            (v / "raw" / "c.md").write_text("---\ntitle: C\n---\n", "utf-8")
+            self.assertEqual(vault.cmd_new_note(v, "x", "raw/c.md"), 0)
+            self.assertEqual(vault.cmd_new_note(v, "x", "raw/c.md"), 1)  # already exists
+
+
 if __name__ == "__main__":
     unittest.main()
