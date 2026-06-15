@@ -260,7 +260,19 @@ def cmd_register(root: Path, *, dry_run: bool = False, runner=subprocess.run) ->
             print(f"vault register: command failed: {' '.join(cmd)}", file=sys.stderr)
             return 1
     return 0
-def cmd_status(root: Path) -> int: raise NotImplementedError
+def cmd_status(root: Path) -> int:
+    raws = sorted((root / "raw").glob("*.md"))
+    reg = (root / "index" / "source-registry.md").read_text(encoding="utf-8")
+    log = (root / "index" / "log.md").read_text(encoding="utf-8")
+    print(f"{'clipping':40} {'summary':8} {'registry':8} {'log':5}")
+    for r in raws:
+        stem = r.stem
+        has_summary = (root / "wiki" / "sources" / f"{stem}.md").exists()
+        has_reg = f"[[{stem}]]" in reg
+        has_log = stem in log or r.stem.replace("-", " ") in log
+        print(f"{stem:40} {'yes' if has_summary else 'NO':8} "
+              f"{'yes' if has_reg else 'NO':8} {'yes' if has_log else 'NO':5}")
+    return 0
 
 
 if __name__ == "__main__":

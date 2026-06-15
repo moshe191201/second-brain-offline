@@ -210,5 +210,26 @@ class TestRegister(unittest.TestCase):
             self.assertIn("qmd embed", flat)
 
 
+import io
+from contextlib import redirect_stdout
+
+
+class TestStatus(unittest.TestCase):
+    def test_status_lists_raw_state(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            vault.cmd_scaffold(root, "V")
+            v = root / "V"
+            (v / "raw" / "sample-clipping.md").write_text(FIXTURE.read_text("utf-8"), "utf-8")
+            vault.cmd_ingest(v, Path("raw/sample-clipping.md"))
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = vault.cmd_status(v)
+            out = buf.getvalue()
+            self.assertEqual(rc, 0)
+            self.assertIn("sample-clipping", out)
+            self.assertIn("summary", out)  # column header or marker
+
+
 if __name__ == "__main__":
     unittest.main()
