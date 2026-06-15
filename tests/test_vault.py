@@ -149,5 +149,44 @@ class TestIngest(unittest.TestCase):
             self.assertEqual(reg.count("[[sample-clipping]]"), 1)  # no duplicate row
 
 
+class TestCheck(unittest.TestCase):
+    def _filled_vault(self, d):
+        root = Path(d)
+        vault.cmd_scaffold(root, "V")
+        v = root / "V"
+        (v / "raw" / "sample-clipping.md").write_text(FIXTURE.read_text("utf-8"), "utf-8")
+        vault.cmd_ingest(v, Path("raw/sample-clipping.md"))
+        vault.cmd_new_note(v, "low-rank-adapters", "raw/sample-clipping.md")
+        (v / "wiki" / "sources" / "understanding-low-rank-adapters.md").write_text(
+            '---\ntitle: "Summary — Understanding Low-Rank Adapters"\n'
+            'type: source-summary\ntags: [lora]\nsources:\n  - "[[sample-clipping]]"\n'
+            'published: 2026-01-15\n---\n\n'
+            "# Summary — Understanding Low-Rank Adapters\n\n"
+            "**LoRA trains small low-rank matrices on frozen weights.**\n\n"
+            "The article explains low-rank adaptation, grounded in [[sample-clipping]].\n\n"
+            "## Key claims\n- low-rank update -> [[low-rank-adapters]]\n\n"
+            "## Derived concept notes\n[[low-rank-adapters]]\n", "utf-8")
+        (v / "wiki" / "low-rank-adapters.md").write_text(
+            '---\ntitle: "Low Rank Adapters"\ntype: concept\ntags: [lora]\n'
+            'sources:\n  - "[[sample-clipping]]"\n---\n\n'
+            "# Low Rank Adapters\n\n"
+            "**LoRA adds trainable low-rank matrices to frozen weights.**\n\n"
+            "Body grounded in [[sample-clipping]]. W' = W + (a/r)BA.\n\n"
+            "## Related\n[[understanding-low-rank-adapters]]\n", "utf-8")
+        return v
+
+    def test_check_passes_when_filled(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._filled_vault(d)
+            self.assertEqual(vault.cmd_check(v), 0)
+
+    def test_check_fails_on_todo_marker(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._filled_vault(d)
+            note = v / "wiki" / "low-rank-adapters.md"
+            note.write_text(note.read_text("utf-8") + "\n<!-- TODO: extra -->\n", "utf-8")
+            self.assertNotEqual(vault.cmd_check(v), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
