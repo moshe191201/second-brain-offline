@@ -18,6 +18,9 @@
 >   environment setup; if the two ever disagree, `CLAUDE.md` wins.
 > - **Substitute every `<...>` placeholder** (e.g. `<Vault>`, `<clippings>`) with a real
 >   path before running a command. Never run a command with angle brackets still in it.
+> - **Prefer the in-repo skills.** This vault ships `vault-setup / vault-ingest / vault-query
+>   / vault-lint` in `.claude/skills/` backed by `scripts/vault.py`. Use them rather than
+>   improvising; they encode this runbook deterministically for minimal models.
 
 ---
 
