@@ -1,6 +1,8 @@
 # CLAUDE.md — Vault Schema
 
 > Full replication runbook: `instructions.md` · Design spec: `docs/superpowers/specs/2026-06-11-vault-improvements-and-eval-design.md`
+> Operating skills: `.claude/skills/vault-*` · CLI: `scripts/vault.py`
+> STRICTNESS: MINIMAL   <!-- MINIMAL = deterministic-only. CAPABLE = enable self-review. -->
 
 ## Three-layer model
 
@@ -104,6 +106,13 @@ published: YYYY-MM-DD
    not already in any note → save as `wiki/<slug>.md` with `type: analysis`,
    list source notes in `sources:`, link from MOC "Analyses" section,
    append `## [YYYY-MM-DD] analysis | <title>` to `index/log.md`
+
+## Skills
+
+- New/changed `raw/` clipping → **vault-ingest**.
+- Domain question → **vault-query** (enforces the grounding rule above).
+- Health check before "done" → **vault-lint** (`python3 scripts/vault.py check`).
+- New/air-gapped vault setup → **vault-setup**.
 
 ## Workflow — Lint
 
