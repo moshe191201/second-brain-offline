@@ -227,8 +227,11 @@ class TestStatus(unittest.TestCase):
                 rc = vault.cmd_status(v)
             out = buf.getvalue()
             self.assertEqual(rc, 0)
-            self.assertIn("sample-clipping", out)
-            self.assertIn("summary", out)  # column header or marker
+            self.assertIn("summary", out)  # column header
+            # After ingest, the clipping row must show all three present (no NO).
+            row = [ln for ln in out.splitlines() if ln.startswith("sample-clipping")][0]
+            self.assertIn("yes", row)       # summary detected via title-slug
+            self.assertNotIn("NO", row)     # registry + log also present
 
 
 if __name__ == "__main__":
