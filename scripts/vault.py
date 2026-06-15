@@ -137,7 +137,37 @@ def cmd_scaffold(root: Path, name: str) -> int:
 
 
 def cmd_ingest(root: Path, raw_file: Path) -> int: raise NotImplementedError
-def cmd_new_note(root: Path, slug: str, source: str) -> int: raise NotImplementedError
+
+
+def _raw_stem(source: str) -> str:
+    return Path(source).stem
+
+
+def cmd_new_note(root: Path, slug: str, source: str) -> int:
+    slug = slugify(slug)
+    src_path = root / source
+    if not src_path.exists():
+        print(f"vault new-note: source {source} not found.", file=sys.stderr)
+        return 1
+    note = root / "wiki" / f"{slug}.md"
+    if note.exists():
+        print(f"vault new-note: {note.relative_to(root)} already exists; not overwriting.",
+              file=sys.stderr)
+        return 1
+    stem = _raw_stem(source)
+    content = (
+        f'---\ntitle: "{slug.replace("-", " ").title()}"\ntype: concept\ntags: []\n'
+        f'sources:\n  - "[[{stem}]]"\n---\n\n'
+        f'# {slug.replace("-", " ").title()}\n\n'
+        f'<!-- TODO: one-sentence thesis in bold, grounded in [[{stem}]] -->\n\n'
+        f'<!-- TODO: body. Dense [[wikilinks]] to sibling notes. -->\n\n'
+        f'## Related\n<!-- TODO: [[sibling-note]] · [[sibling-note]] -->\n'
+    )
+    note.write_text(content, encoding="utf-8")
+    print(f"vault new-note: created wiki/{slug}.md — fill its TODO blanks, then add a MOC link.")
+    return 0
+
+
 def cmd_check(root: Path) -> int: raise NotImplementedError
 def cmd_register(root: Path, *, dry_run: bool = False, runner=subprocess.run) -> int: raise NotImplementedError
 def cmd_status(root: Path) -> int: raise NotImplementedError
