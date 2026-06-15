@@ -128,15 +128,17 @@ class TestIngest(unittest.TestCase):
             v = self._vault(d)
             rc = vault.cmd_ingest(v, Path("raw/sample-clipping.md"))
             self.assertEqual(rc, 0)
-            summary = v / "wiki" / "sources" / "sample-clipping.md"
+            summary = v / "wiki" / "sources" / "understanding-low-rank-adapters.md"
             self.assertTrue(summary.exists())
             sfm, _ = vault.parse_frontmatter(summary.read_text("utf-8"))
             self.assertEqual(sfm["type"], "source-summary")
             self.assertEqual(sfm["sources"], ["[[sample-clipping]]"])
             reg = (v / "index" / "source-registry.md").read_text("utf-8")
             self.assertIn("[[sample-clipping]]", reg)
+            self.assertIn("[[understanding-low-rank-adapters]]", reg)
             log = (v / "index" / "log.md").read_text("utf-8")
             self.assertIn("ingest | Understanding Low-Rank Adapters", log)
+            self.assertIn("sample-clipping", log)
 
     def test_ingest_is_rerunnable(self):
         with tempfile.TemporaryDirectory() as d:

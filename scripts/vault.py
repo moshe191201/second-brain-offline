@@ -146,8 +146,9 @@ def cmd_ingest(root: Path, raw_file: Path) -> int:
     title = fm.get("title", src.stem)
     published = fm.get("published") or fm.get("created") or ""
     stem = src.stem
-    # 1. Summary stub (idempotent).
-    summary = root / "wiki" / "sources" / f"{stem}.md"
+    summary_slug = slugify(title)
+    # 1. Summary stub (idempotent), named by title slug to avoid colliding with the raw stem.
+    summary = root / "wiki" / "sources" / f"{summary_slug}.md"
     if not summary.exists():
         summary.write_text(
             f'---\ntitle: "Summary — {title}"\ntype: source-summary\ntags: []\n'
@@ -163,15 +164,17 @@ def cmd_ingest(root: Path, raw_file: Path) -> int:
     reg = root / "index" / "source-registry.md"
     reg_text = reg.read_text(encoding="utf-8")
     if f"[[{stem}]]" not in reg_text:
-        row = f"| | [[{stem}]] | {published} | [[sources/{stem}]] | |\n"
+        row = f"| | [[{stem}]] | {published} | [[{summary_slug}]] | |\n"
         reg.write_text(reg_text.rstrip("\n") + "\n" + row, encoding="utf-8")
-    # 3. Log entry (idempotent on title+op).
+    # 3. Log entry (idempotent on title+op). Includes the raw stem so lint's
+    #    per-clipping log check (which searches for the raw stem) passes.
     log = root / "index" / "log.md"
     log_text = log.read_text(encoding="utf-8")
-    entry = f"## [{datetime.date.today().isoformat()}] ingest | {title}"
     if f"ingest | {title}" not in log_text:
-        log.write_text(log_text.rstrip("\n") + "\n\n" + entry + "\n", encoding="utf-8")
-    print(f"vault ingest: {stem} — summary stub ready in wiki/sources/{stem}.md.")
+        entry = (f"## [{datetime.date.today().isoformat()}] ingest | {title}\n\n"
+                 f"- source: [[{stem}]]\n")
+        log.write_text(log_text.rstrip("\n") + "\n\n" + entry, encoding="utf-8")
+    print(f"vault ingest: {stem} — summary stub ready in wiki/sources/{summary_slug}.md.")
     print("Now: read the clipping, then create one concept note per idea via:")
     print(f"  python3 scripts/vault.py new-note <slug> --source {raw_file}")
     print("Then fill all <!-- TODO --> blanks and run: python3 scripts/vault.py check")
