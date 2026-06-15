@@ -39,5 +39,28 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(body.strip(), "no frontmatter here")
 
 
+import re as _re
+
+
+class TestTemplates(unittest.TestCase):
+    SKILLS = ["vault-setup", "vault-ingest", "vault-query", "vault-lint"]
+
+    def test_skill_frontmatter_valid(self):
+        for name in self.SKILLS:
+            path = vault.TEMPLATES_DIR / "skills" / name / "SKILL.md"
+            self.assertTrue(path.exists(), f"missing {path}")
+            text = path.read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("---\n"), f"{name}: no frontmatter fence")
+            fm, _ = vault.parse_frontmatter(text)
+            self.assertIn("name", fm, f"{name}: no name")
+            self.assertIn("description", fm, f"{name}: no description")
+            self.assertEqual(fm["name"], name)
+
+    def test_skill_has_minimal_path(self):
+        for name in self.SKILLS:
+            text = (vault.TEMPLATES_DIR / "skills" / name / "SKILL.md").read_text("utf-8")
+            self.assertIn("Minimal-model path", text, f"{name}: missing minimal path")
+
+
 if __name__ == "__main__":
     unittest.main()
