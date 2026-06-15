@@ -62,5 +62,28 @@ class TestTemplates(unittest.TestCase):
             self.assertIn("Minimal-model path", text, f"{name}: missing minimal path")
 
 
+import tempfile
+
+
+class TestScaffold(unittest.TestCase):
+    def test_scaffold_creates_layout(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            rc = vault.cmd_scaffold(root, "Test Vault")
+            self.assertEqual(rc, 0)
+            v = root / "Test Vault"
+            for sub in ["raw", "wiki", "wiki/sources", "index", "eval", "scripts",
+                        ".claude/skills/vault-ingest"]:
+                self.assertTrue((v / sub).is_dir(), f"missing dir {sub}")
+            self.assertTrue((v / "CLAUDE.md").exists())
+            self.assertIn("Test Vault", (v / "CLAUDE.md").read_text("utf-8"))
+            self.assertTrue((v / "scripts/vault.py").exists())
+            self.assertTrue((v / "scripts/templates/CLAUDE.md").exists(),
+                            "templates must travel for self-replication")
+            self.assertTrue((v / ".claude/skills/vault-ingest/SKILL.md").exists())
+            for stem in ["_map-of-content", "source-registry", "log", "key-takeaways"]:
+                self.assertTrue((v / "index" / f"{stem}.md").exists(), stem)
+
+
 if __name__ == "__main__":
     unittest.main()
