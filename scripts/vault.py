@@ -1,5 +1,6 @@
 """Deterministic vault CLI. Pure stdlib. See docs/superpowers/specs/2026-06-15-*."""
 import argparse
+import datetime
 import re
 import shutil
 import subprocess
@@ -136,7 +137,45 @@ def cmd_scaffold(root: Path, name: str) -> int:
     return 0
 
 
-def cmd_ingest(root: Path, raw_file: Path) -> int: raise NotImplementedError
+def cmd_ingest(root: Path, raw_file: Path) -> int:
+    src = root / raw_file
+    if not src.exists():
+        print(f"vault ingest: {raw_file} not found.", file=sys.stderr)
+        return 1
+    fm, _ = parse_frontmatter(src.read_text(encoding="utf-8"))
+    title = fm.get("title", src.stem)
+    published = fm.get("published") or fm.get("created") or ""
+    stem = src.stem
+    # 1. Summary stub (idempotent).
+    summary = root / "wiki" / "sources" / f"{stem}.md"
+    if not summary.exists():
+        summary.write_text(
+            f'---\ntitle: "Summary — {title}"\ntype: source-summary\ntags: []\n'
+            f'sources:\n  - "[[{stem}]]"\n'
+            + (f"published: {published}\n" if published else "")
+            + f'---\n\n# Summary — {title}\n\n'
+            f'<!-- TODO: one-sentence thesis -->\n\n'
+            f'<!-- TODO: ~200 words on what the source argues, grounded in [[{stem}]] -->\n\n'
+            f'## Key claims\n<!-- TODO: - claim → [[derived-concept-note]] -->\n\n'
+            f'## Derived concept notes\n<!-- TODO: [[note-a]] · [[note-b]] -->\n',
+            encoding="utf-8")
+    # 2. Registry row (idempotent).
+    reg = root / "index" / "source-registry.md"
+    reg_text = reg.read_text(encoding="utf-8")
+    if f"[[{stem}]]" not in reg_text:
+        row = f"| | [[{stem}]] | {published} | [[sources/{stem}]] | |\n"
+        reg.write_text(reg_text.rstrip("\n") + "\n" + row, encoding="utf-8")
+    # 3. Log entry (idempotent on title+op).
+    log = root / "index" / "log.md"
+    log_text = log.read_text(encoding="utf-8")
+    entry = f"## [{datetime.date.today().isoformat()}] ingest | {title}"
+    if f"ingest | {title}" not in log_text:
+        log.write_text(log_text.rstrip("\n") + "\n\n" + entry + "\n", encoding="utf-8")
+    print(f"vault ingest: {stem} — summary stub ready in wiki/sources/{stem}.md.")
+    print("Now: read the clipping, then create one concept note per idea via:")
+    print(f"  python3 scripts/vault.py new-note <slug> --source {raw_file}")
+    print("Then fill all <!-- TODO --> blanks and run: python3 scripts/vault.py check")
+    return 0
 
 
 def _raw_stem(source: str) -> str:

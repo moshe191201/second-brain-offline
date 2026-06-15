@@ -112,5 +112,40 @@ class TestNewNote(unittest.TestCase):
             self.assertEqual(vault.cmd_new_note(v, "x", "raw/c.md"), 1)  # already exists
 
 
+FIXTURE = ROOT / "tests" / "fixtures" / "sample-clipping.md"
+
+
+class TestIngest(unittest.TestCase):
+    def _vault(self, d):
+        root = Path(d)
+        vault.cmd_scaffold(root, "V")
+        v = root / "V"
+        (v / "raw" / "sample-clipping.md").write_text(FIXTURE.read_text("utf-8"), "utf-8")
+        return v
+
+    def test_ingest_creates_summary_registry_log(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            rc = vault.cmd_ingest(v, Path("raw/sample-clipping.md"))
+            self.assertEqual(rc, 0)
+            summary = v / "wiki" / "sources" / "sample-clipping.md"
+            self.assertTrue(summary.exists())
+            sfm, _ = vault.parse_frontmatter(summary.read_text("utf-8"))
+            self.assertEqual(sfm["type"], "source-summary")
+            self.assertEqual(sfm["sources"], ["[[sample-clipping]]"])
+            reg = (v / "index" / "source-registry.md").read_text("utf-8")
+            self.assertIn("[[sample-clipping]]", reg)
+            log = (v / "index" / "log.md").read_text("utf-8")
+            self.assertIn("ingest | Understanding Low-Rank Adapters", log)
+
+    def test_ingest_is_rerunnable(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            self.assertEqual(vault.cmd_ingest(v, Path("raw/sample-clipping.md")), 0)
+            self.assertEqual(vault.cmd_ingest(v, Path("raw/sample-clipping.md")), 0)
+            reg = (v / "index" / "source-registry.md").read_text("utf-8")
+            self.assertEqual(reg.count("[[sample-clipping]]"), 1)  # no duplicate row
+
+
 if __name__ == "__main__":
     unittest.main()
