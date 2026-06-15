@@ -7,6 +7,18 @@
 > Obsidian + raw clippings. It is written to be readable by a human engineer and executable
 > verbatim by an AI agent (Claude Code or compatible).
 
+> **If you are an AI agent executing this — read this first.**
+> - **Part 1 and Part 2 are REFERENCE, not commands.** Part 1 narrates, in past tense, how
+>   the vault was first built; Part 2 lists what it depends on. **Do not execute Part 1** —
+>   do not rebuild things it describes as already done, and do not treat its counts (e.g.
+>   "13 notes") as targets to reproduce. Your runbook is **Part 3 only.**
+> - **`CLAUDE.md` is the authoritative contract.** Before running anything, read the vault's
+>   `CLAUDE.md` and obey its three workflows (Ingest / Query / Lint), its templates, its
+>   safety rules, and its vault-grounding rule. This document only wraps `CLAUDE.md` with
+>   environment setup; if the two ever disagree, `CLAUDE.md` wins.
+> - **Substitute every `<...>` placeholder** (e.g. `<Vault>`, `<clippings>`) with a real
+>   path before running a command. Never run a command with angle brackets still in it.
+
 ---
 
 ## 0. Architecture overview
@@ -40,6 +52,25 @@ extracted entities). They are complementary and both fully local.
 Vanilla Obsidian needs **no community plugins** to use the result — wikilinks power
 Obsidian's built-in graph view and backlinks pane natively.
 
+### Platform note — macOS/Linux vs Windows
+
+Every command block below is shown twice: **macOS / Linux (bash/zsh)** first, then the
+**Windows (PowerShell)** equivalent. Windows assumptions:
+
+- Use **PowerShell 7+** (`pwsh`). Windows PowerShell 5.1 works too, but it lacks the `&&`
+  operator — where bash chains `a && b`, the PowerShell block uses `;` (runs the second
+  command regardless of the first's exit code) or puts each on its own line.
+- **`tar` is built into Windows 10 1803+ / Windows 11** (it's bsdtar), so the `tar czf` /
+  `tar xzf` commands are byte-identical. `Compress-Archive` / `Expand-Archive` are the
+  native fallback but produce `.zip`, not `.tgz`.
+- Use the **`py`** launcher instead of `python3`. `--break-system-packages` is a Linux
+  (PEP 668) flag and is normally unneeded on Windows — drop it.
+- Path mappings: `~` → `$env:USERPROFILE`, `/tmp` → `$env:TEMP`. Forward slashes in tool
+  *arguments* (e.g. `qmd collection add ./raw`) are accepted by qmd/graphify on Windows.
+- ⚠ qmd's model cache shows as `~/.cache/qmd` on macOS/Linux. On Windows it may live under
+  `$env:USERPROFILE\.cache\qmd` or `$env:LOCALAPPDATA`; **confirm the real path with
+  `qmd status` / `qmd doctor`** before staging or restoring it.
+
 ---
 
 ## Part 1 — What was done, step by step
@@ -59,13 +90,27 @@ Obsidian's built-in graph view and backlinks pane natively.
 Two tools needed setup (details and exact errors in §4 Troubleshooting):
 
 1. **qmd** (Claude Code plugin `@tobilu/qmd`) — its `dist/` was missing. Built from source:
+
+   macOS / Linux (bash):
    ```bash
    cd ~/.claude/plugins/cache/qmd/qmd/0.1.0
    npm install --cache /tmp/npmcache-qmd && npm run build
    ```
+   Windows (PowerShell):
+   ```powershell
+   cd $env:USERPROFILE\.claude\plugins\cache\qmd\qmd\0.1.0
+   npm install --cache $env:TEMP\npmcache-qmd
+   npm run build
+   ```
 2. **graphify** (PyPI package `graphifyy`) — installed into the active Python:
+
+   macOS / Linux (bash):
    ```bash
    python3 -m pip install graphifyy --break-system-packages
+   ```
+   Windows (PowerShell):
+   ```powershell
+   py -m pip install graphifyy
    ```
 
 ### Step 3. Synthesize the wiki layer (LLM work)
@@ -135,6 +180,7 @@ Followed the `/graphify` skill pipeline exactly (commands use the interpreter re
 
 ### Step 6. Build the search index (qmd)
 
+macOS / Linux (bash):
 ```bash
 qmd collection add ./raw   --name sources    # + context description
 qmd collection add ./wiki  --name concepts   # + context description
@@ -142,12 +188,21 @@ qmd collection add ./index --name indices    # + context description
 qmd update                                   # index all 24 docs (BM25)
 qmd embed                                    # 104 chunks embedded (local GGUF model)
 ```
+Windows (PowerShell) — same commands; only `&&` differs:
+```powershell
+qmd collection add ./raw   --name sources
+qmd collection add ./wiki  --name concepts
+qmd collection add ./index --name indices
+qmd update; qmd embed
+```
 
 Each collection was given a context description so the agent knows what lives where
 (`sources` = verbatim clippings, `concepts` = synthesized notes, `indices` = maps).
 
 ### Step 7. Verify both retrieval paths
 
+macOS / Linux (bash) — and **identical on Windows (PowerShell)**; these take the same
+single-string arguments on both shells:
 ```bash
 qmd search "GRPO critic length bias" -n 3
 # → qmd://concepts/grpo-and-variants.md at 76% — correct top hit
@@ -190,12 +245,12 @@ transferred into the closed environment.
 
 ### Runtimes
 
-| Dependency | Version used | Notes |
-|---|---|---|
-| Node.js | v26.2.0 | Runs qmd. Any ≥20 LTS should work. **(artifact: installer/tarball)** |
-| npm | 11.13.0 | Bundled with Node. Used only at install time. |
-| Python | 3.12.13 | Runs graphify. ≥3.10 required. **(artifact if not present)** |
-| Obsidian | any recent | Vanilla — no community plugins required. **(artifact: installer)** |
+| Dependency | Version used | Notes                                                                |
+| ---------- | ------------ | -------------------------------------------------------------------- |
+| Node.js    | v26.2.0      | Runs qmd. Any ≥20 LTS should work. **(artifact: installer/tarball)** |
+| npm        | 11.13.0      | Bundled with Node. Used only at install time.                        |
+| Python     | 3.12.13      | Runs graphify. ≥3.10 required. **(artifact if not present)**         |
+| Obsidian   | any recent   | Vanilla — no community plugins required. **(artifact: installer)**   |
 
 ### The LLM (closed environment)
 
@@ -224,11 +279,11 @@ transferred into the closed environment.
 
 ### Skills (agent instructions)
 
-| Skill | Location | Role |
-|---|---|---|
+| Skill                            | Location                                           | Role                                                            |
+| -------------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
 | `obsidian_knowledge_graph_skill` | `~/.claude/skills/obsidian_knowledge_graph_skill/` | The 3-layer model, ingestion loop, safety rules. **(artifact)** |
-| `graphify` | `~/.claude/skills/graphify/` | The graph pipeline the agent follows. **(artifact)** |
-| `qmd` | inside the qmd plugin (`skills/qmd/`) | Search/retrieval craft. Ships with the plugin. |
+| `graphify`                       | `~/.claude/skills/graphify/`                       | The graph pipeline the agent follows. **(artifact)**            |
+| `qmd`                            | inside the qmd plugin (`skills/qmd/`)              | Search/retrieval craft. Ships with the plugin.                  |
 
 ### Explicitly NOT needed
 
@@ -251,6 +306,7 @@ already operational inside.
 > minor version** — both qmd (llama.cpp binaries) and graphifyy (tree-sitter grammars)
 > ship compiled, platform-specific code.
 
+macOS / Linux (bash):
 ```bash
 # A1. Node.js + Obsidian installers for the target platform → grab from vendor sites.
 
@@ -275,6 +331,41 @@ tar czf graphify-wheels.tgz graphify-wheels
 # A5. Skills + plugin folders (from a machine where they exist, e.g. this one):
 tar czf skills.tgz -C ~/.claude/skills graphify obsidian_knowledge_graph_skill
 tar czf qmd-plugin.tgz -C ~/.claude/plugins/cache/qmd qmd   # includes built dist/
+
+# A6. Vault control files — the schema, the lint, and the eval checklist. The air-gapped
+#     target starts from "vanilla Obsidian + raw clippings", so there is NO existing vault
+#     inside to copy these from — you must carry them in. Stage from this source vault:
+tar czf vault-control.tgz -C <source-vault> CLAUDE.md scripts/lint_vault.py eval/VAULT_TESTS.md
+```
+Windows (PowerShell):
+```powershell
+# A1. Node.js + Obsidian installers for the target platform → grab from vendor sites.
+
+# A2. qmd — install globally, then capture the entire installed tree:
+npm install -g @tobilu/qmd@2.5.3
+tar czf qmd-install-tree.tgz -C "$(npm prefix -g)" .
+#     Fallback plain tarball:
+npm pack @tobilu/qmd@2.5.3            # → tobilu-qmd-2.5.3.tgz
+
+# A3. Pre-pull ALL qmd models by exercising every model-backed command once:
+New-Item -ItemType Directory -Force $env:TEMP\qmd-smoke | Out-Null
+'# hello world test note' | Out-File -Encoding utf8 $env:TEMP\qmd-smoke\test.md
+qmd collection add $env:TEMP\qmd-smoke --name smoke
+qmd update; qmd embed
+qmd query "hello world test" -n 1
+#     Adjust the cache path if `qmd status` shows a different location (see Platform note):
+tar czf qmd-models.tgz -C $env:USERPROFILE\.cache\qmd models
+
+# A4. graphify — download the full wheel set:
+py -m pip download graphifyy==0.8.37 -d .\graphify-wheels
+tar czf graphify-wheels.tgz graphify-wheels
+
+# A5. Skills + plugin folders:
+tar czf skills.tgz -C $env:USERPROFILE\.claude\skills graphify obsidian_knowledge_graph_skill
+tar czf qmd-plugin.tgz -C $env:USERPROFILE\.claude\plugins\cache\qmd qmd
+
+# A6. Vault control files (no existing vault inside the air gap to copy from — carry them in):
+tar czf vault-control.tgz -C <source-vault> CLAUDE.md scripts/lint_vault.py eval/VAULT_TESTS.md
 ```
 
 **Transfer manifest** (one-way into the closed network):
@@ -285,9 +376,11 @@ tar czf qmd-plugin.tgz -C ~/.claude/plugins/cache/qmd qmd   # includes built dis
 4. `graphify-wheels.tgz` (→ optionally push wheels to internal PyPI/Artifactory)
 5. `skills.tgz`, `qmd-plugin.tgz`
 6. The raw clippings folder
+7. `vault-control.tgz` (CLAUDE.md · scripts/lint_vault.py · eval/VAULT_TESTS.md)
 
 ### Phase B — Install inside the closed environment
 
+macOS / Linux (bash):
 ```bash
 # B1. Install Node.js and Obsidian from the transferred installers.
 
@@ -315,30 +408,77 @@ ls ~/.claude/plugins/cache/qmd/qmd/0.1.0/dist/cli/qmd.js   # must exist (prebuil
 # B6. Confirm Claude Code routes to local MiniMax 2.7 and that NO Gemini key is set
 #     (unset GEMINI_API_KEY GOOGLE_API_KEY) — this makes graphify use host-LLM extraction.
 ```
+Windows (PowerShell):
+```powershell
+# B1. Install Node.js and Obsidian from the transferred installers.
+
+# B2. qmd — unpack the install tree into the npm global prefix:
+tar xzf qmd-install-tree.tgz -C "$(npm prefix -g)"
+qmd --version                          # expect: qmd 2.5.3
+#    (Internal registry alternative: npm install -g @tobilu/qmd --registry <internal>)
+
+# B3. qmd models — restore the cache BEFORE first run (confirm the path via `qmd status`):
+New-Item -ItemType Directory -Force $env:USERPROFILE\.cache\qmd | Out-Null
+tar xzf qmd-models.tgz -C $env:USERPROFILE\.cache\qmd
+
+# B4. graphify — offline wheel install:
+tar xzf graphify-wheels.tgz
+py -m pip install --no-index --find-links .\graphify-wheels graphifyy
+py -c "import graphify; print('graphify OK')"
+
+# B5. Skills and plugin:
+New-Item -ItemType Directory -Force $env:USERPROFILE\.claude\skills, $env:USERPROFILE\.claude\plugins\cache\qmd | Out-Null
+tar xzf skills.tgz -C $env:USERPROFILE\.claude\skills
+tar xzf qmd-plugin.tgz -C $env:USERPROFILE\.claude\plugins\cache\qmd
+Test-Path $env:USERPROFILE\.claude\plugins\cache\qmd\qmd\0.1.0\dist\cli\qmd.js   # must be True
+
+# B6. Confirm Claude Code routes to local MiniMax 2.7 and that NO Gemini key is set:
+Remove-Item Env:GEMINI_API_KEY, Env:GOOGLE_API_KEY -ErrorAction SilentlyContinue
+```
 
 ### Phase C — Create the vault and run the pipeline
 
+macOS / Linux (bash):
 ```bash
 # C1. Vault skeleton — open Obsidian, create a vault, then:
 mkdir -p "<Vault>"/{raw,wiki,index,scripts,eval}
 cp <clippings>/*.md "<Vault>/raw/"     # raw/ is now FROZEN — never edit these files
-cp <source-vault>/CLAUDE.md "<Vault>/"             # schema + grounding rule (loaded every session)
-cp <source-vault>/scripts/lint_vault.py "<Vault>/scripts/"
-# Optionally seed eval/VAULT_TESTS.md from the source vault, then rewrite its gold
-# facts (T1–T3) for the NEW corpus — the structure carries over, the answers do not.
+
+# C1b. Lay down the control files carried in via vault-control.tgz (Phase A6). This unpacks
+#      CLAUDE.md, scripts/lint_vault.py, and eval/VAULT_TESTS.md into the new vault:
+tar xzf vault-control.tgz -C "<Vault>/"
+# eval/VAULT_TESTS.md is now a TEMPLATE: its gold facts (T1–T3) describe the OLD corpus.
+# Rewrite them for the NEW corpus before testing — the structure carries over, answers do not.
+```
+Windows (PowerShell):
+```powershell
+# C1. Vault skeleton:
+'raw','wiki','index','scripts','eval' | ForEach-Object { New-Item -ItemType Directory -Force "<Vault>\$_" | Out-Null }
+Copy-Item <clippings>\*.md "<Vault>\raw\"   # raw/ is now FROZEN — never edit these files
+
+# C1b. Lay down the control files carried in via vault-control.tgz (Phase A6):
+tar xzf vault-control.tgz -C "<Vault>\"
+# eval/VAULT_TESTS.md is now a TEMPLATE describing the OLD corpus — rewrite T1–T3 for the new one.
 ```
 
 **C2. Agent-driven path (recommended).** Start Claude Code in the vault root and prompt:
 
-> *"The vault contains only raw clippings in `raw/`. Follow the obsidian-knowledge-graph
-> skill: ingest the clippings, synthesize atomic wiki notes and index maps, build the
-> graphify knowledge graph, and register + embed qmd collections so the vault is queryable."*
+> *"This vault has only raw clippings in `raw/`, plus `CLAUDE.md`. First read `CLAUDE.md`
+> in full, then follow its **Ingest** workflow for every clipping in `raw/`: search qmd
+> first to avoid duplicates; write a `wiki/sources/<slug>.md` summary and the atomic
+> `wiki/` concept notes; update `index/_map-of-content.md`, `index/source-registry.md`,
+> and `index/log.md`; register the `raw/`, `wiki/`, `index/` qmd collections (NOT `eval/`),
+> then `qmd update && qmd embed`; build the knowledge graph with `/graphify .`. Obey the
+> safety rules and the vault-grounding rule. Finally run `python3 scripts/lint_vault.py`
+> and fix every finding until it exits 0."*
 
-The agent will execute Steps 1–7 of Part 1 (the skills encode the whole procedure).
+This drives Steps 1–8 of Part 1 (the skills + `CLAUDE.md` encode the whole procedure).
 MiniMax 2.7 performs the synthesis and the graphify semantic extraction via subagents.
+**`CLAUDE.md` must already be in the vault root (C1b) — it is what the agent obeys.**
 
 **C3. Manual path (equivalent, for humans or scripting).**
 
+macOS / Linux (bash):
 ```bash
 # Search index:
 cd "<Vault>"
@@ -348,17 +488,32 @@ qmd collection add ./index --name indices
 # NEVER: qmd collection add ./eval — gold answers must not enter retrieval.
 qmd update && qmd embed
 
-# Knowledge graph (the /graphify skill drives these via Claude Code; LLM required
-# for extraction + labeling, so the manual path still uses the agent for those parts):
-#   detect → extract (subagent) → build/cluster → label → export
+# Knowledge graph — the FULL pipeline is the Claude Code skill, not a bare CLI command.
+# Run it in Claude Code as:  /graphify .            (first build)
+#                            /graphify . --update   (later, incremental)
+# It does: detect → extract (general-purpose subagent) → build/cluster → label → export.
+# LLM required for extraction + labeling, so even this "manual" path uses the agent here.
+# The bare `graphify` CLI only covers query/path/explain on an ALREADY-built graph.
 # Outputs land in graphify-out/: graph.json, graph.html, GRAPH_REPORT.md
 
 # Wiki + index notes: write them per the templates in Part 1, Steps 3–4.
 # Without an LLM these are human-authored — the templates and safety rules still apply.
 ```
+Windows (PowerShell) — only the search-index commands differ (`&&` → `;`); the graphify
+and note-authoring guidance above is identical:
+```powershell
+cd "<Vault>"
+qmd collection add ./raw   --name sources
+qmd collection add ./wiki  --name concepts
+qmd collection add ./index --name indices
+# NEVER: qmd collection add ./eval
+qmd update; qmd embed
+# Knowledge graph: run /graphify . in Claude Code (same as bash). Notes: write per templates.
+```
 
 ### Phase D — Verify
 
+macOS / Linux (bash):
 ```bash
 python3 scripts/lint_vault.py                  # deterministic structure check — must exit 0
 qmd collection list                            # confirm eval/ is NOT among the collections
@@ -367,6 +522,22 @@ qmd search "<term you know is in a clipping>" -n 3        # BM25 path
 qmd query $'intent: find the concept note about <X>\nlex: <exact terms>\nvec: <paraphrase>'  # hybrid path
 graphify query "<conceptual question spanning two articles>"  # graph traversal path
 open graphify-out/graph.html                   # visual sanity check (8-ish communities)
+```
+Windows (PowerShell) — bash `$'...\n...'` has no PowerShell analogue; build the multi-line
+`qmd query` argument with a here-string instead:
+```powershell
+py scripts\lint_vault.py                        # must exit 0
+qmd collection list                             # confirm eval/ is NOT a collection
+qmd status
+qmd search "<term you know is in a clipping>" -n 3
+$q = @'
+intent: find the concept note about <X>
+lex: <exact terms>
+vec: <paraphrase>
+'@
+qmd query $q -n 3
+graphify query "<conceptual question spanning two articles>"
+Invoke-Item graphify-out\graph.html             # or: start graphify-out\graph.html
 ```
 
 For a richer behavioral check, run the `eval/VAULT_TESTS.md` checklist (T0–T4): T1
@@ -393,23 +564,33 @@ Acceptance criteria (what "done" looked like in this build):
 
 (Steps 4–6 are the `CLAUDE.md` **Ingest** workflow — the single source of truth for the loop.)
 
+On Windows (PowerShell): `qmd update; qmd embed` (step 2) and `py scripts\lint_vault.py`
+(step 6); `/graphify . --update` is run inside Claude Code and is identical.
+
 ---
 
 ## 4. Troubleshooting (errors actually hit in this build, with fixes)
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `qmd.js` missing — `Error: Cannot find .../dist/cli/qmd.js` | Plugin shipped unbuilt; first build attempt used `bun` which wasn't installed (exit 0 but no output — check for the file, not the exit code) | Build with npm: `npm install && npm run build` in the plugin dir |
-| `npm install` → `EEXIST`/`EACCES` on `~/.npm/_cacache` | Corrupted/foreign-owned npm cache | Use an alternate cache: `npm install --cache /tmp/npmcache-qmd` |
-| `python3 -m pip install graphifyy` → "externally managed environment" | PEP 668 protected Python | Add `--break-system-packages`, or use a venv |
-| `graphify query` warns "skill is from 0.8.36, package is 0.8.37" | Skill/package version skew | Cosmetic — queries work; sync versions when convenient |
-| `qmd embed`/`qmd query` tries to download a model offline | `~/.cache/qmd/models/` incomplete | Restore the full models dir from staging (Phase A3) |
-| graphify subagent chunk file missing after extraction | Subagent dispatched as read-only `Explore` type | Always dispatch with `subagent_type="general-purpose"` |
+| Symptom                                                               | Cause                                                                                                                                        | Fix                                                              |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `qmd.js` missing — `Error: Cannot find .../dist/cli/qmd.js`           | Plugin shipped unbuilt; first build attempt used `bun` which wasn't installed (exit 0 but no output — check for the file, not the exit code) | Build with npm: `npm install && npm run build` in the plugin dir |
+| `npm install` → `EEXIST`/`EACCES` on `~/.npm/_cacache`                | Corrupted/foreign-owned npm cache                                                                                                            | Use an alternate cache: `npm install --cache /tmp/npmcache-qmd`  |
+| `python3 -m pip install graphifyy` → "externally managed environment" | PEP 668 protected Python                                                                                                                     | Add `--break-system-packages`, or use a venv                     |
+| `graphify query` warns "skill is from 0.8.36, package is 0.8.37"      | Skill/package version skew                                                                                                                   | Cosmetic — queries work; sync versions when convenient           |
+| `qmd embed`/`qmd query` tries to download a model offline             | `~/.cache/qmd/models/` incomplete                                                                                                            | Restore the full models dir from staging (Phase A3)              |
+| graphify subagent chunk file missing after extraction                 | Subagent dispatched as read-only `Explore` type                                                                                              | Always dispatch with `subagent_type="general-purpose"`           |
+
+**Windows equivalents for the fixes above:** alternate npm cache →
+`npm install --cache $env:TEMP\npmcache-qmd`; the corrupted cache itself lives at
+`$env:LOCALAPPDATA\npm-cache` (not `~/.npm/_cacache`). The PEP 668 / `--break-system-packages`
+row does not apply — Windows Python is not externally-managed, so just `py -m pip install …`.
+The incomplete-models fix restores `$env:USERPROFILE\.cache\qmd` (confirm via `qmd status`).
 
 ---
 
 ## 5. Query cheat sheet (day-to-day use)
 
+macOS / Linux (bash):
 ```bash
 # "Where is the note about …" — exact words known:
 qmd search "loss masking -100 chat template" -n 5
@@ -421,6 +602,28 @@ qmd query $'intent: find the concept note explaining why 4-bit NF4 matches bf16 
 qmd get "#<docid>"            # or: qmd get qmd://concepts/lora.md
 
 # "How does X relate to Y" — multi-hop:
+graphify query "how does the KV cache connect quantization to serving throughput"
+graphify path "LoRA" "PagedAttention"
+graphify explain "GRPO"
+```
+Windows (PowerShell) — only the multi-line `qmd query` changes (use a here-string); every
+other line is identical:
+```powershell
+# Exact words known:
+qmd search "loss masking -100 chat template" -n 5
+
+# Conceptual / fuzzy recall:
+$q = @'
+intent: find the concept note explaining why 4-bit NF4 matches bf16 quality
+lex: NF4 QLoRA double quantization
+vec: information-theoretically optimal 4-bit datatype for normally distributed weights
+'@
+qmd query $q -n 5
+
+# Read a hit:
+qmd get "#<docid>"            # or: qmd get qmd://concepts/lora.md
+
+# Multi-hop:
 graphify query "how does the KV cache connect quantization to serving throughput"
 graphify path "LoRA" "PagedAttention"
 graphify explain "GRPO"
