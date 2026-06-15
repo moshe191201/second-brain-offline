@@ -39,7 +39,12 @@ Entry point for the vault. Built from the 8-lesson **Finetuning Sessions** serie
 - [[llm-inference-at-scale]] — prefill/decode, batching evolution, vLLM PagedAttention, kvcached
 - [[kv-cache]] — the cross-cutting memory constraint linking training, quantization, and serving
 
+## Analyses
+
+*Write-back notes from cross-source synthesis queries. Added here when created.*
+
 ## Other indices
 
-- [[source-registry]] — provenance of all raw clippings
+- [[source-registry]] — provenance of all raw clippings (includes per-source summaries in `wiki/sources/`)
 - [[key-takeaways]] — distilled insights across the corpus
+- [[log]] — append-only ingest journal
