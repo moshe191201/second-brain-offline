@@ -260,6 +260,27 @@ def cmd_register(root: Path, *, dry_run: bool = False, runner=subprocess.run) ->
             print(f"vault register: command failed: {' '.join(cmd)}", file=sys.stderr)
             return 1
     return 0
+
+
+def _summary_exists_for(root: Path, stem: str) -> bool:
+    """A clipping is summarized if some wiki/sources note lists it in `sources:`.
+
+    Detect by frontmatter rather than filename so it works regardless of how the
+    summary is named (e.g. hand-curated short slugs vs. title slugs).
+    """
+    src_dir = root / "wiki" / "sources"
+    if not src_dir.exists():
+        return False
+    for s in src_dir.glob("*.md"):
+        fm, _ = parse_frontmatter(s.read_text(encoding="utf-8"))
+        links = fm.get("sources", [])
+        if isinstance(links, str):
+            links = [links]
+        if any(link.strip().strip("[]") == stem for link in links):
+            return True
+    return False
+
+
 def cmd_status(root: Path) -> int:
     raws = sorted((root / "raw").glob("*.md"))
     reg = (root / "index" / "source-registry.md").read_text(encoding="utf-8")
@@ -267,9 +288,7 @@ def cmd_status(root: Path) -> int:
     print(f"{'clipping':40} {'summary':8} {'registry':8} {'log':5}")
     for r in raws:
         stem = r.stem
-        fm, _ = parse_frontmatter(r.read_text(encoding="utf-8"))
-        summary_slug = slugify(fm.get("title", stem))
-        has_summary = (root / "wiki" / "sources" / f"{summary_slug}.md").exists()
+        has_summary = _summary_exists_for(root, stem)
         has_reg = f"[[{stem}]]" in reg
         has_log = stem in log
         print(f"{stem:40} {'yes' if has_summary else 'NO':8} "

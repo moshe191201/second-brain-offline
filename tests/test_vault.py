@@ -189,7 +189,7 @@ class TestCheck(unittest.TestCase):
 
 
 class TestRegister(unittest.TestCase):
-    def test_register_dry_run_excludes_eval(self):
+    def test_register_excludes_eval(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             vault.cmd_scaffold(root, "V")
