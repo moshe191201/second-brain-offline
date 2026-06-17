@@ -23,3 +23,4 @@ All raw clippings, captured with the Obsidian web clipper from **The Neural Maze
 ## Key primary papers cited across the series
 
 Attention Is All You Need (1706.03762) · Scaling Laws (2001.08361) · InstructGPT (2203.02155) · LIMA (2305.11206) · LoRA (2106.09685) · AdamW (1711.05101) · PPO (1707.06347) · DPO (2305.18290) · GRPO/DeepSeekMath (2402.03300) · DeepSeek-R1 (2501.12948) · SNAC (2410.14411) · Qwen3-VL (2511.21631)
+| | [[Claude Fable 5 and Claude Mythos 5]] | 2026-06-16 | [[claude-fable-5-and-claude-mythos-5]] | |
