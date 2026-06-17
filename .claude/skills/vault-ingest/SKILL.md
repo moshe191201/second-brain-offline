@@ -21,8 +21,14 @@ you write note bodies only.
    - exit 0 → continue to step 6.
    - exit ≠0 → do exactly what the message says, or **STOP and report**. Do NOT free-form
      "fix". Do NOT edit `raw/`.
-6. Build the graph: run `/graphify . --update` in Claude Code.
-7. Register search: `python3 scripts/vault.py register`.
+6. Build the graph: run `/graphify raw/ --update` in Claude Code. Use `raw/`, **not** `.` —
+   this vault's graph is raw-only (the `wiki/` notes are derived from `raw/` and would
+   duplicate nodes). Check `graphify-out/.graphify_root` if unsure of the established scope.
+7. Update search so the new notes are retrievable:
+   - **Re-ingest into an already-set-up vault (the usual case):** `qmd update && qmd embed`.
+     The collections already exist; do not re-add them.
+   - **First-time setup only:** `python3 scripts/vault.py register` (registers the qmd
+     collections for `raw/`, `wiki/`, `index/` — never `eval/` — then updates and embeds).
 
 ## Capable-model path (opt-in; only if CLAUDE.md STRICTNESS: CAPABLE)
 

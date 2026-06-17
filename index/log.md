@@ -37,3 +37,7 @@ Source: theneuralmaze.substack.com · Lesson 8/8 · Derived: llm-inference-at-sc
 
 ## [2026-06-11] build | Initial knowledge graph + search index
 graphify: 141 nodes, 268 edges, 8 communities · qmd: 3 collections, 24 docs, 104 chunks embedded
+
+## [2026-06-16] ingest | Claude Fable 5 and Claude Mythos 5
+
+- source: [[Claude Fable 5 and Claude Mythos 5]]

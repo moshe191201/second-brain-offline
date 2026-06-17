@@ -39,6 +39,13 @@ Entry point for the vault. Built from the 8-lesson **Finetuning Sessions** serie
 - [[llm-inference-at-scale]] — prefill/decode, batching evolution, vLLM PagedAttention, kvcached
 - [[kv-cache]] — the cross-cutting memory constraint linking training, quantization, and serving
 
+## Frontier model releases
+
+- [[mythos-class-models]] — Anthropic's Mythos tier (above Opus); Fable 5 vs Mythos 5 (same model, safeguards differ)
+- [[mythos-class-capabilities]] — claimed SOTA across SWE, knowledge work, vision, memory, life sciences
+- [[fable-5-safety-classifiers]] — classifier safeguards that fall back to Opus 4.8
+- [[mythos-trusted-access]] — Project Glasswing, trusted-access programs, 30-day data retention
+
 ## Analyses
 
 *Write-back notes from cross-source synthesis queries. Added here when created.*
