@@ -54,16 +54,18 @@ Class `OpenAICompatLLM` implementing qmd's existing `LLM` interface
 |---|---|---|
 | `embed` / `embedBatch` | `POST /v1/embeddings` | Native batching (API accepts arrays of inputs). |
 | `generate` (HyDE) | `POST /v1/chat/completions` | Direct port. |
-| `expandQuery` | `POST /v1/chat/completions` | Port upstream's expansion prompt (built for its fine-tuned 1.7B model) to a plain instruct prompt; parse the same `lex`/`vec`/`hyde` output structure. Parse failure → fall back to the raw query (an existing qmd code path). |
-| `rerank` | `POST /v1/chat/completions` | Tiered, see below. |
+| `expandQuery` | `POST /v1/chat/completions` | Port upstream's expansion prompt (built for its fine-tuned 1.7B model) to a plain instruct prompt; parse the same `lex`/`vec`/`hyde` output structure. Malformed model *output* (not an API failure) → fall back to the raw query (an existing qmd code path). |
+| `rerank` | `POST /v1/chat/completions` | Configuration-driven, see below. |
 
-**Rerank tiers** (each failure degrades to the next; search never dies):
+**Rerank configuration** (chosen by what is configured — not a failure-fallback
+chain; API failures abort the query, see Error handling):
 
 1. `QMD_OPENAI_RERANK_MODEL` set → chat/completions against that model with the
    reranker's yes/no prompt format (Qwen3-Reranker style), requesting `logprobs`;
-   score = P("yes"). If the server omits logprobs, parse the generated yes/no text.
-2. No rerank model → pointwise relevance scoring with the regular chat model.
-3. Failure → skip reranking; keep hybrid-fusion order.
+   score = P("yes"). If the server omits logprobs in its response, parse the
+   generated yes/no text (a capability adaptation, not a failure path).
+2. No rerank model configured → pointwise relevance scoring with the regular
+   chat model.
 
 **Tokenizer compromise:** qmd chunks documents at index time via the local model's
 tokenizer (`tokenize`/`countTokens`/`detokenize`). The API backend has no local
@@ -101,23 +103,29 @@ QMD_OPENAI_TIMEOUT_MS=…           # optional (defaults: embed 60s/batch, chat 
 
 ## Error handling & operations
 
-- **Unreachable endpoint / non-200:** fail with a message naming the operation, the
-  URL, and the env var to check — never a raw stack trace.
+- **Fail-fast policy (queries):** any API failure during a query — unreachable
+  endpoint, non-200, timeout, on any of embed/expand/rerank — **fails the query**
+  with a message naming the operation, the URL, and the env var to check; never a
+  raw stack trace. There is no silent degradation to a partial pipeline, and under
+  `QMD_LLM=openai` there is **never** a fallback to local models — `LlamaCpp` is
+  unreachable code in this mode.
 - **`qmd doctor` / `qmd status`:** when `QMD_LLM=openai`, replace the GPU/VRAM probe
   with a backend section — reports `backend: openai`, performs a live
   `GET /v1/models` reachability check, and verifies the configured model names
   appear in the list.
-- **`qmd embed` resilience:** per-batch retry with backoff (3 attempts); chunks that
-  still fail are reported and skipped; re-running `qmd embed` picks them up (qmd
-  embeds only missing vectors — already incremental).
-- **Query-time degradation:** expansion or rerank failure never kills a query;
-  worst case is BM25 + vector with fusion order.
+- **`qmd embed` (indexing, not query):** per-batch retry with backoff (3 attempts);
+  chunks that still fail are reported and the command **exits non-zero** so the
+  failure is visible; re-running `qmd embed` picks them up (qmd embeds only missing
+  vectors — already incremental).
+- **`qmd search` (BM25-only) needs no model** and keeps working regardless of API
+  availability — it never touches the backend.
 
 ## Testing
 
 1. **Unit tests** (in the fork, alongside upstream's suite): mocked `fetch` for all
-   four operations, the rerank/expansion fallback chains, error mapping, and the
-   char-based chunker.
+   four operations, the fail-fast behavior (API failure → query errors, no
+   degradation, no local-model import), rerank configuration selection, error
+   mapping, and the char-based chunker.
 2. **No-llama regression test:** with `QMD_LLM=openai`, run index + search + query
    in an install tree where `node_modules/node-llama-cpp` is renamed away. Proves
    the local runtime is never touched — the guarantee that "no GPU needed"
