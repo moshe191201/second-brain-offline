@@ -76,7 +76,7 @@ Every command block below is shown twice: **macOS / Linux (bash/zsh)** first, th
 
 ---
 
-## Distribution & updates — the `vault-framework` package
+## Distribution & updates — the `second-brain-vault-framework` package
 
 > **This is the primary way to obtain, create, and update a vault.** It supersedes the
 > hand-carried "vault control files" steps in Part 3 (A6 / B5 / C1b): instead of `tar`-ing
@@ -88,7 +88,7 @@ Every command block below is shown twice: **macOS / Linux (bash/zsh)** first, th
 ### The model — one boundary crossing, then normal package flow
 
 The framework (`CLAUDE.md`, the `vault-*` skills, `scripts/vault.py`, `scripts/lint_vault.py`,
-`instructions.md`, `eval/VAULT_TESTS.md`) is packaged as **`vault-framework`** and published
+`instructions.md`, `eval/VAULT_TESTS.md`) is packaged as **`second-brain-vault-framework`** and published
 to the internal package index. Consumers never clone anything and never copy files by hand.
 
 ```
@@ -110,7 +110,7 @@ payload *out of itself* into that directory.
 
 ```bash
 # macOS / Linux
-pip install vault-framework                 # from the internal index (see pip config below)
+pip install second-brain-vault-framework                 # from the internal index (see pip config below)
 vault scaffold ~/Documents/myvault          # lays framework files + empty content dirs into the folder
 cd ~/Documents/myvault
 git init                                     # OPTIONAL — versions YOUR content only, not the framework
@@ -119,7 +119,7 @@ git init                                     # OPTIONAL — versions YOUR conten
 
 ```powershell
 # Windows (PowerShell 7+)
-py -m pip install vault-framework
+py -m pip install second-brain-vault-framework
 vault scaffold $env:USERPROFILE\Documents\myvault
 cd $env:USERPROFILE\Documents\myvault
 git init                                     # OPTIONAL
@@ -129,13 +129,13 @@ git init                                     # OPTIONAL
 
 ```bash
 # macOS / Linux
-pip install --upgrade vault-framework        # newer tool + payload from the internal index
+pip install --upgrade second-brain-vault-framework        # newer tool + payload from the internal index
 vault upgrade ~/Documents/myvault            # re-lays framework files INTO the folder
 ```
 
 ```powershell
 # Windows
-py -m pip install --upgrade vault-framework
+py -m pip install --upgrade second-brain-vault-framework
 vault upgrade $env:USERPROFILE\Documents\myvault
 ```
 
@@ -161,7 +161,7 @@ index-url = <INTERNAL_PIP_INDEX_URL>
 trusted-host = <INTERNAL_PIP_INDEX_HOST>
 ```
 
-With this in place, `pip install vault-framework` resolves entirely inside the air gap. (The
+With this in place, `pip install second-brain-vault-framework` resolves entirely inside the air gap. (The
 same index also serves the graphify wheels referenced in Part 3 A4/B4.)
 
 ### Ownership contract — what `upgrade` touches
@@ -203,11 +203,11 @@ constraint as Part 3 Phase A).
 git tag v<X.Y.Z> && git push <GITLAB_BASE>/<VAULT_FRAMEWORK_REPO> --tags
 
 # 2. Build the wheel
-python -m build                              # produces dist/vault_framework-<X.Y.Z>-py3-none-any.whl
+python -m build                              # produces dist/second_brain_vault_framework-<X.Y.Z>-py3-none-any.whl
 
 # 3. Bundle for the air gap (self-contained, offline-installable)
 #    Uses the airgap-pack skill — carries the wheel + any deps not already on the internal index
-airgap-pack dist/                            # → vault-framework-<X.Y.Z>-airgap.tar.zst (+ install script + checksums)
+airgap-pack dist/                            # → second-brain-vault-framework-<X.Y.Z>-airgap.tar.zst (+ install script + checksums)
 
 # 4. One-way transfer the bundle across the boundary, then INSIDE the air gap publish to the index:
 #    (exact publish command depends on the index; examples)
@@ -216,7 +216,7 @@ twine upload --repository-url <INTERNAL_PIP_UPLOAD_URL> dist/*.whl        # PyPI
 ```
 
 After step 4, every consumer inside the air gap gets the release with
-`pip install --upgrade vault-framework` over the LAN — no per-consumer boundary crossing.
+`pip install --upgrade second-brain-vault-framework` over the LAN — no per-consumer boundary crossing.
 
 Placeholders to fill for your environment:
 - `<GITLAB_BASE>` / `<VAULT_FRAMEWORK_REPO>` — internal GitLab base URL and framework source repo path
@@ -485,7 +485,7 @@ tar czf skills.tgz -C ~/.claude/skills graphify obsidian_knowledge_graph_skill
 tar czf qmd-plugin.tgz -C ~/.claude/plugins/cache/qmd qmd   # includes built dist/
 
 # A6. Vault control files — the schema, the lint, and the eval checklist.
-#     SUPERSEDED by the vault-framework package (see "Distribution & updates" above):
+#     SUPERSEDED by the second-brain-vault-framework package (see "Distribution & updates" above):
 #     these files now ship in the package payload and land via `vault scaffold` /
 #     `vault upgrade`, so you no longer hand-carry them. Kept here only as the legacy
 #     manual fallback for an environment without the package on its internal index.
@@ -598,7 +598,7 @@ macOS / Linux (bash):
 mkdir -p "<Vault>"/{raw,wiki,index,scripts,eval}
 cp <clippings>/*.md "<Vault>/raw/"     # raw/ is now FROZEN — never edit these files
 
-# C1b. Lay down the control files. PREFERRED: `pip install vault-framework && vault scaffold <Vault>`
+# C1b. Lay down the control files. PREFERRED: `pip install second-brain-vault-framework && vault scaffold <Vault>`
 #      (see "Distribution & updates" above) creates the vault with these files already in place.
 #      LEGACY fallback (no package on the internal index) — unpack the carried tgz from A6:
 tar xzf vault-control.tgz -C "<Vault>/"

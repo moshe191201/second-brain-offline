@@ -37,8 +37,12 @@ Additionally, the framework's source-of-truth (`scripts/templates/`, `scripts/va
 
 ## Chosen approach
 
-The framework becomes a **published, pip-installable package** (`vault-framework`) whose source
-is a standalone GitLab repo. The installed package is the *tool + payload*; a **vault** is a
+The framework becomes a **published, pip-installable package** (distribution name
+`second-brain-vault-framework`; import package `second_brain_vault_framework`; CLI command
+`vault`) whose source is a standalone GitLab repo **owned centrally by the framework maintainer**.
+Each consuming team scaffolds and manages **their own git repo for content**, and upgrades the
+infra by bumping the pip package — there is no shared content repo and no per-team fork of the
+framework. The installed package is the *tool + payload*; a **vault** is a
 normal user-owned directory the tool writes into. Updates flow one-way to an internal index once
 per release, then reach every consumer via `pip install --upgrade` over the LAN.
 
@@ -55,7 +59,7 @@ Rejected alternatives:
 
 ```
 vault-framework/
-├── pyproject.toml               # name = vault-framework, version = X.Y.Z (single source of version truth)
+├── pyproject.toml               # name = second-brain-vault-framework, version = X.Y.Z (single version source of truth)
 ├── src/vault_framework/
 │   ├── cli.py                   # `vault` entry point: scaffold / upgrade / check / ingest / new-note / register / status
 │   ├── core.py                  # the current vault.py logic, refactored into an importable module
@@ -111,6 +115,12 @@ is the single source of truth for what the framework owns.
 | Framework-owned | `owned_paths` | Overwritten wholesale from payload. Read-only by convention. |
 | User-zone | marked block(s) inside owned files | Extracted before overwrite, re-injected after — preserved verbatim. |
 | Content | everything not in `owned_paths` | Never read, never touched. |
+
+`instructions.md` is a **framework-owned, read-only file with no user-zone** — it is the
+canonical source of truth for the air-gapped model, and the `vault-*` skills are wired to read it
+before committing any other action. `upgrade` therefore always overwrites it wholesale so the
+skills' gating can never run against a stale or hand-edited copy. A consumer who edited it still
+gets a backup-on-drift copy (below), but the canonical version always wins.
 
 Edge cases:
 - **Removed files** — `upgrade` diffs the vault's stamped manifest against the new package
@@ -169,11 +179,18 @@ Summary:
 - Air-gap smoke (reuse `airgap-pack` proof): build wheel → install from a local index with
   networking disabled → `scaffold` + `upgrade` succeed offline.
 
+## Resolved decisions
+
+- **Package name:** distribution `second-brain-vault-framework`, import `second_brain_vault_framework`,
+  CLI `vault`. (Verify the name is free on the internal index at publish time; the CLI command is
+  unaffected either way.)
+- **`instructions.md`:** framework-owned, read-only, **no user-zone** — canonical source of truth,
+  always overwritten on upgrade (skills gate on reading it, so it must never go stale).
+- **GitLab ownership:** the framework maintainer owns one central infra repo; each team scaffolds
+  and manages its own content git repo and upgrades the infra via the pip package. No per-team
+  fork of the framework, no shared content repo.
+
 ## Open questions (resolve during planning)
 
-- Package name collision on the internal index? Confirm `vault-framework` is free / pick a
-  namespaced name.
-- Should `instructions.md` itself be framework-owned (overwritten) or split so consumer notes
-  survive? Leaning framework-owned with a user-zone if needed.
-- GitLab ownership model (central repo you control vs. per-team) — deferred; does not block the
-  package design.
+- Does any *other* framework file besides `CLAUDE.md` need a user-zone? Current answer: no —
+  `CLAUDE.md` is the only file with vault-specific config; everything else is read-only.
