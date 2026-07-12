@@ -76,6 +76,155 @@ Every command block below is shown twice: **macOS / Linux (bash/zsh)** first, th
 
 ---
 
+## Distribution & updates — the `vault-framework` package
+
+> **This is the primary way to obtain, create, and update a vault.** It supersedes the
+> hand-carried "vault control files" steps in Part 3 (A6 / B5 / C1b): instead of `tar`-ing
+> `CLAUDE.md`, the skills, and the lint script into a vault by hand, the framework ships as a
+> single installable package. The qmd / graphify / Obsidian / local-LLM setup around it
+> (the rest of Part 3) is unchanged — this section only replaces how the *framework files
+> themselves* are delivered and kept up to date.
+
+### The model — one boundary crossing, then normal package flow
+
+The framework (`CLAUDE.md`, the `vault-*` skills, `scripts/vault.py`, `scripts/lint_vault.py`,
+`instructions.md`, `eval/VAULT_TESTS.md`) is packaged as **`vault-framework`** and published
+to the internal package index. Consumers never clone anything and never copy files by hand.
+
+```
+(your connected build machine)
+        │  build wheel → airgap-pack → one-way transfer   ── ONCE per release
+        ▼
+(internal PyPI / Artifactory index)   ← the framework's canonical home inside the air gap
+        │  pip install / pip install --upgrade            ── every consumer, over the LAN
+        ▼
+(each consumer's vault directory)     ← a normal folder the user owns and opens in Obsidian
+```
+
+The package is only the *machinery* — it lives in `site-packages`, users never open it. A
+**vault** is a normal directory the user creates wherever they like; all their `raw/`,
+`wiki/`, `index/`, `graphify-out/` live there. The package's only job is to copy its bundled
+payload *out of itself* into that directory.
+
+### Consumer — first-time setup
+
+```bash
+# macOS / Linux
+pip install vault-framework                 # from the internal index (see pip config below)
+vault scaffold ~/Documents/myvault          # lays framework files + empty content dirs into the folder
+cd ~/Documents/myvault
+git init                                     # OPTIONAL — versions YOUR content only, not the framework
+# drop clippings into raw/ and start working
+```
+
+```powershell
+# Windows (PowerShell 7+)
+py -m pip install vault-framework
+vault scaffold $env:USERPROFILE\Documents\myvault
+cd $env:USERPROFILE\Documents\myvault
+git init                                     # OPTIONAL
+```
+
+### Consumer — updating to a new framework version
+
+```bash
+# macOS / Linux
+pip install --upgrade vault-framework        # newer tool + payload from the internal index
+vault upgrade ~/Documents/myvault            # re-lays framework files INTO the folder
+```
+
+```powershell
+# Windows
+py -m pip install --upgrade vault-framework
+vault upgrade $env:USERPROFILE\Documents\myvault
+```
+
+`vault upgrade` overwrites only framework-owned paths, preserves the user-zone (below), and
+never reads or touches content (`raw/`, `wiki/`, `index/`, `graphify-out/`, `.obsidian/`).
+
+### Configuring pip for the internal index (air gap)
+
+The air-gapped index does **not** mirror public PyPI, so pip must be pointed at it explicitly.
+Set this once per machine. Replace every `<...>` placeholder with the real internal value.
+
+- Internal index URL: `<INTERNAL_PIP_INDEX_URL>`  (e.g. `https://<ARTIFACTORY_HOST>/artifactory/api/pypi/<PYPI_REPO>/simple`)
+- Index host (for `trusted-host` if TLS is internal-only): `<INTERNAL_PIP_INDEX_HOST>`
+
+**Config file location:**
+- macOS / Linux: `~/.config/pip/pip.conf`  (or `~/.pip/pip.conf`)
+- Windows: `%APPDATA%\pip\pip.ini`
+
+**Contents:**
+```ini
+[global]
+index-url = <INTERNAL_PIP_INDEX_URL>
+trusted-host = <INTERNAL_PIP_INDEX_HOST>
+```
+
+With this in place, `pip install vault-framework` resolves entirely inside the air gap. (The
+same index also serves the graphify wheels referenced in Part 3 A4/B4.)
+
+### Ownership contract — what `upgrade` touches
+
+The package ships a `manifest.json` (also stamped into each vault as `.vault-framework.json`)
+that is the single source of truth for what the framework owns:
+
+| Tier | Paths | On `vault upgrade` |
+|------|-------|--------------------|
+| **Framework-owned** | `CLAUDE.md`, `instructions.md`, `.claude/skills/vault-*/SKILL.md`, `scripts/vault.py`, `scripts/lint_vault.py`, `eval/VAULT_TESTS.md` | Overwritten wholesale from the package payload. Read-only by convention. |
+| **User-zone** | the marked block inside `CLAUDE.md` | Extracted before the overwrite and re-injected after — preserved verbatim. |
+| **Content** | everything not listed above (`raw/`, `wiki/`, `index/`, `graphify-out/`, `.obsidian/`, `.vault-framework.json`) | Never read, never touched. |
+
+**User-zone marker** — the one place a consumer edits `CLAUDE.md` for vault-specific config:
+```markdown
+## Vault-specific configuration
+<!-- USER ZONE START -->
+Domain: <your domain>
+Extra tags: [<tag>, <tag>]
+<!-- USER ZONE END -->
+```
+
+Two safety behaviors:
+- **Removed files:** if a new version drops a framework file the old one had, `upgrade` diffs
+  the stamped manifest against the new one and deletes only the orphaned *framework-owned*
+  file. Content is never in the manifest, so it is never a deletion candidate.
+- **Backup-on-drift:** if a framework file on disk differs from the previous payload (a
+  consumer edited it despite the read-only convention), `upgrade` copies it to
+  `.vault-framework-backup/<old-version>/` and reports it before overwriting — nothing edited
+  is silently lost.
+
+### Maintainer — cutting and shipping a release
+
+Run on a **connected build machine that matches the target OS / CPU / Python** (same
+constraint as Part 3 Phase A).
+
+```bash
+# 1. Bump version in pyproject.toml, commit, tag, push the SOURCE repo to GitLab
+git tag v<X.Y.Z> && git push <GITLAB_BASE>/<VAULT_FRAMEWORK_REPO> --tags
+
+# 2. Build the wheel
+python -m build                              # produces dist/vault_framework-<X.Y.Z>-py3-none-any.whl
+
+# 3. Bundle for the air gap (self-contained, offline-installable)
+#    Uses the airgap-pack skill — carries the wheel + any deps not already on the internal index
+airgap-pack dist/                            # → vault-framework-<X.Y.Z>-airgap.tar.zst (+ install script + checksums)
+
+# 4. One-way transfer the bundle across the boundary, then INSIDE the air gap publish to the index:
+#    (exact publish command depends on the index; examples)
+twine upload --repository-url <INTERNAL_PIP_UPLOAD_URL> dist/*.whl        # PyPI/twine
+#    or:  jf rt upload "dist/*.whl" "<ARTIFACTORY_PYPI_REPO_PATH>"        # Artifactory CLI
+```
+
+After step 4, every consumer inside the air gap gets the release with
+`pip install --upgrade vault-framework` over the LAN — no per-consumer boundary crossing.
+
+Placeholders to fill for your environment:
+- `<GITLAB_BASE>` / `<VAULT_FRAMEWORK_REPO>` — internal GitLab base URL and framework source repo path
+- `<INTERNAL_PIP_UPLOAD_URL>` — the index's upload endpoint (distinct from the read `index-url`)
+- `<ARTIFACTORY_PYPI_REPO_PATH>` — Artifactory repo path if using the `jf` CLI instead of twine
+
+---
+
 ## Part 1 — What was done, step by step
 
 ### Step 1. Survey the vault and load the skill
@@ -335,9 +484,11 @@ tar czf graphify-wheels.tgz graphify-wheels
 tar czf skills.tgz -C ~/.claude/skills graphify obsidian_knowledge_graph_skill
 tar czf qmd-plugin.tgz -C ~/.claude/plugins/cache/qmd qmd   # includes built dist/
 
-# A6. Vault control files — the schema, the lint, and the eval checklist. The air-gapped
-#     target starts from "vanilla Obsidian + raw clippings", so there is NO existing vault
-#     inside to copy these from — you must carry them in. Stage from this source vault:
+# A6. Vault control files — the schema, the lint, and the eval checklist.
+#     SUPERSEDED by the vault-framework package (see "Distribution & updates" above):
+#     these files now ship in the package payload and land via `vault scaffold` /
+#     `vault upgrade`, so you no longer hand-carry them. Kept here only as the legacy
+#     manual fallback for an environment without the package on its internal index.
 tar czf vault-control.tgz -C <source-vault> CLAUDE.md scripts/lint_vault.py eval/VAULT_TESTS.md
 ```
 Windows (PowerShell):
@@ -447,8 +598,9 @@ macOS / Linux (bash):
 mkdir -p "<Vault>"/{raw,wiki,index,scripts,eval}
 cp <clippings>/*.md "<Vault>/raw/"     # raw/ is now FROZEN — never edit these files
 
-# C1b. Lay down the control files carried in via vault-control.tgz (Phase A6). This unpacks
-#      CLAUDE.md, scripts/lint_vault.py, and eval/VAULT_TESTS.md into the new vault:
+# C1b. Lay down the control files. PREFERRED: `pip install vault-framework && vault scaffold <Vault>`
+#      (see "Distribution & updates" above) creates the vault with these files already in place.
+#      LEGACY fallback (no package on the internal index) — unpack the carried tgz from A6:
 tar xzf vault-control.tgz -C "<Vault>/"
 # eval/VAULT_TESTS.md is now a TEMPLATE: its gold facts (T1–T3) describe the OLD corpus.
 # Rewrite them for the NEW corpus before testing — the structure carries over, answers do not.
