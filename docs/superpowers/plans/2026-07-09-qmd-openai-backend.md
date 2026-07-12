@@ -1344,6 +1344,183 @@ git commit -m "feat: route store/session/chunker through getDefaultLLM backend s
 
 ---
 
+### Task 8b: Wire the SDK's `createStore()` (and thus `qmd mcp`) through `getDefaultLLM`
+
+**Discovered during Task 8's code-quality review, not in the original spec.** `src/store.ts`'s
+internal store (used by the CLI's `search`/`embed`/etc. commands) now correctly falls through to
+`getDefaultLLM()` via `getLlm(store)`. But the SDK's public `createStore()` in `src/index.ts` —
+which `src/mcp/server.ts`'s `startMcpServer()`/`startMcpHttpServer()` call, which is what `qmd mcp`
+actually runs — unconditionally constructs `new LlamaCpp({...})` and assigns it to
+`internal.llm`, bypassing the backend seam entirely. Since `getLlm()` only falls through to
+`getDefaultLLM()` when `store.llm` is unset, any consumer going through `index.ts`'s `createStore()`
+(the MCP server included) never honors `QMD_LLM=openai` — it always loads a local GGUF model
+regardless of configuration. This directly threatens the fork's purpose for its most likely
+production path (`qmd mcp`, the mode the Claude Code qmd plugin invokes).
+
+**Files:**
+- Modify: `src/index.ts:68-70` (llm.js import), `src/index.ts:375-384` (`createStore`'s LlamaCpp
+  construction + assignment), `src/index.ts:541-547` (`close()`'s disposal)
+- Test: `test/llm-openai-sdk-isolation.test.ts` (create)
+
+- [ ] **Step 1: Write the failing test**
+
+```typescript
+// test/llm-openai-sdk-isolation.test.ts
+import { describe, test, expect, afterEach, vi } from "vitest";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
+
+describe("SDK createStore() honors QMD_LLM=openai", () => {
+  test("does not construct a LlamaCpp, and never touches the network, under the openai backend", async () => {
+    vi.stubEnv("QMD_LLM", "openai");
+    vi.stubEnv("QMD_OPENAI_BASE_URL", "http://sdk-isolation-test/v1");
+    vi.stubEnv("QMD_OPENAI_EMBED_MODEL", "embed-model");
+    vi.stubEnv("QMD_OPENAI_CHAT_MODEL", "chat-model");
+    vi.stubGlobal("fetch", vi.fn(() => {
+      throw new Error("network must not be touched by createStore() itself");
+    }));
+
+    const { createStore } = await import("../src/index.js");
+    const { OpenAICompatLLM } = await import("../src/llm-openai.js");
+    const dir = mkdtempSync(join(tmpdir(), "qmd-sdk-isolation-"));
+    const dbPath = join(dir, "test.sqlite");
+    try {
+      const store = await createStore({
+        dbPath,
+        config: { collections: {} },
+      });
+      // No per-store LlamaCpp was constructed: internal.llm is either unset,
+      // or (if ever set) must not be a LlamaCpp instance.
+      expect(store.internal.llm).not.toBeInstanceOf(
+        (await import("../src/llm.js")).LlamaCpp
+      );
+      await store.close(); // must not throw even with no per-store llm to dispose
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("still constructs a per-store LlamaCpp when QMD_LLM is unset (local backend unchanged)", async () => {
+    vi.stubEnv("QMD_LLM", "");
+    const { createStore } = await import("../src/index.js");
+    const { LlamaCpp } = await import("../src/llm.js");
+    const dir = mkdtempSync(join(tmpdir(), "qmd-sdk-isolation-local-"));
+    const dbPath = join(dir, "test.sqlite");
+    try {
+      const store = await createStore({
+        dbPath,
+        config: { collections: {} },
+      });
+      expect(store.internal.llm).toBeInstanceOf(LlamaCpp);
+      await store.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `cd /Users/moshe/Desktop/Code/qmd-api && CI=true npx vitest run test/llm-openai-sdk-isolation.test.ts --reporter=verbose`
+Expected: FAIL on the first test — `store.internal.llm` IS a `LlamaCpp` instance (constructed
+unconditionally), so `not.toBeInstanceOf` fails. The second test should already pass (it's today's
+existing behavior) — confirms the test file itself is well-formed before the fix.
+
+- [ ] **Step 3: Implement — guard the LlamaCpp construction in `src/index.ts`**
+
+Add `isOpenAIBackend` to the existing `llm.js` import (`src/index.ts:68-70`):
+
+```typescript
+import {
+  LlamaCpp,
+  isOpenAIBackend,
+} from "./llm.js";
+```
+
+Replace the unconditional construction (`src/index.ts:375-384`):
+
+```typescript
+  // Create a per-store LlamaCpp instance — lazy-loads models on first use,
+  // auto-unloads after 5 min inactivity to free VRAM.
+  const llm = new LlamaCpp({
+    embedModel: config?.models?.embed,
+    generateModel: config?.models?.generate,
+    rerankModel: config?.models?.rerank,
+    inactivityTimeoutMs: 5 * 60 * 1000,
+    disposeModelsOnInactivity: true,
+  });
+  internal.llm = llm;
+```
+
+with:
+
+```typescript
+  // Create a per-store LlamaCpp instance for the local backend — lazy-loads
+  // models on first use, auto-unloads after 5 min inactivity to free VRAM.
+  // Under QMD_LLM=openai, skip this: leave internal.llm unset so getLlm()
+  // (store.ts) falls through to the shared getDefaultLLM() singleton, which
+  // is stateless (per-request fetch calls) and has no per-store lifecycle to
+  // manage. Per-store config.models.* overrides are local-backend-only —
+  // resolveEmbedModel()/etc. already ignore them under the openai backend
+  // (Task 3), so there is nothing to preserve here for that path.
+  const llm = isOpenAIBackend() ? undefined : new LlamaCpp({
+    embedModel: config?.models?.embed,
+    generateModel: config?.models?.generate,
+    rerankModel: config?.models?.rerank,
+    inactivityTimeoutMs: 5 * 60 * 1000,
+    disposeModelsOnInactivity: true,
+  });
+  if (llm) internal.llm = llm;
+```
+
+Update `close()` (`src/index.ts:541-547`) to only dispose a per-store `llm` if one was created:
+
+```typescript
+    close: async () => {
+      if (llm) await llm.dispose();
+      internal.close();
+      if (hasYamlConfig || options.config) {
+        setConfigSource(undefined); // Reset config source
+      }
+    },
+```
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `cd /Users/moshe/Desktop/Code/qmd-api && CI=true npx vitest run test/llm-openai-sdk-isolation.test.ts --reporter=verbose`
+Expected: PASS (2/2).
+
+- [ ] **Step 5: Confirm existing SDK/MCP tests are unaffected**
+
+Run: `cd /Users/moshe/Desktop/Code/qmd-api && CI=true npx vitest run test/sdk.test.ts test/mcp.test.ts --reporter=verbose`
+Expected: same pass/fail counts as before this change (these tests monkeypatch
+`store.internal.llm` directly after `createStore()` returns, so they're unaffected either way —
+confirm this holds, don't just assume it).
+
+- [ ] **Step 6: Full suite**
+
+Run: `cd /Users/moshe/Desktop/Code/qmd-api && npm run build && CI=true npx vitest run --reporter=dot`
+Expected: prior baseline count + 2 new tests, only the same 9 pre-existing `test/cli.test.ts`
+failures. If a run shows an unexpected extra failure or takes far longer than ~60-100s, rerun once
+before concluding there's a real regression (a one-off environmental flake has been observed
+before in this plan's execution — see Task 8's notes).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/index.ts test/llm-openai-sdk-isolation.test.ts
+git commit -m "fix: route SDK createStore() (and qmd mcp) through getDefaultLLM backend seam"
+```
+
+---
+
 ### Task 9: CLI — `qmd doctor` reachability check and `qmd status` backend line
 
 **Files:**
