@@ -271,6 +271,7 @@ transferred into the closed environment.
 | Embedding model | `hf_ggml-org_embeddinggemma-300M-Q8_0.gguf` — **318 MB**, auto-downloaded from HuggingFace to `~/.cache/qmd/models/` on first `qmd embed`. **(artifact: the entire `~/.cache/qmd/models/` directory)** |
 | ⚠ Extra models | `qmd query` (reranking/expansion) may fetch *additional* GGUF models on first use. On the staging machine, run `qmd embed` **and** one `qmd query` once, then transfer the whole `models/` dir so nothing is missing offline. |
 | Claude Code plugin | `qmd` plugin 0.1.0 (provides the qmd *skill* to the agent). Source at `~/.claude/plugins/cache/qmd/qmd/0.1.0`; must be built (`npm install && npm run build`) or copied prebuilt. **(artifact)** |
+| ⚡ API backend (fork) | The `qmd-api` fork adds `QMD_LLM=openai`, routing all model work to an OpenAI-compatible endpoint. Under this backend **no GGUF models and no GPU are needed** — skip the `qmd-models.tgz` artifact entirely. Env vars: `QMD_OPENAI_BASE_URL` (required), `QMD_OPENAI_EMBED_MODEL` (required), `QMD_OPENAI_CHAT_MODEL` (required), `QMD_OPENAI_API_KEY` / `QMD_OPENAI_RERANK_MODEL` / `QMD_OPENAI_TIMEOUT_MS` (optional). API failures fail the operation loudly — no local fallback. |
 
 ### graphify (knowledge graph engine)
 
@@ -380,6 +381,49 @@ tar czf vault-control.tgz -C <source-vault> CLAUDE.md scripts/lint_vault.py eval
 5. `skills.tgz`, `qmd-plugin.tgz`
 6. The raw clippings folder
 7. `vault-control.tgz` (CLAUDE.md · scripts/lint_vault.py · eval/VAULT_TESTS.md)
+
+> **API-backend note:** if staging the `qmd-api` fork (below), item 3
+> (`qmd-models.tgz`) is **not needed** — the OpenAI backend loads no local models.
+
+#### Phase A variant — API backend (no GPU, no model transfer)
+
+When the closed environment has an OpenAI-compatible inference endpoint, stage the
+`qmd-api` fork instead of stock qmd. **The staging machine must match the target's
+OS, CPU architecture, and Node major version** (native better-sqlite3/sqlite-vec
+binaries are captured from the staging machine's install tree).
+
+macOS / Linux (bash):
+```bash
+git clone <qmd-api fork> && cd qmd-api && git checkout openai-backend
+npm install && npm run build && npm install -g .
+qmd --version                          # sanity: fork installed
+tar czf qmd-install-tree.tgz -C "$(npm prefix -g)" .
+# A3 (model pre-pull) is NOT needed — skip qmd-models.tgz entirely.
+```
+Windows (PowerShell):
+```powershell
+git clone <qmd-api fork>; cd qmd-api; git checkout openai-backend
+npm install; npm run build; npm install -g .
+qmd --version
+tar czf qmd-install-tree.tgz -C "$(npm prefix -g)" .
+```
+
+#### Phase B variant — API backend
+
+After unpacking the install tree (B2), set the backend env vars machine-wide
+(e.g. `/etc/profile.d/qmd.sh`, or the Windows system environment):
+
+```
+QMD_LLM=openai
+QMD_OPENAI_BASE_URL=https://<internal-endpoint>/v1
+QMD_OPENAI_EMBED_MODEL=<embeddings model name>
+QMD_OPENAI_CHAT_MODEL=<chat model name>
+QMD_OPENAI_RERANK_MODEL=<reranker model name>   # optional
+QMD_OPENAI_API_KEY=<key>                        # optional
+```
+
+Skip B3 (model cache restore). Verify with `qmd doctor` — the "openai backend"
+check must report the endpoint reachable and the configured models present.
 
 ### Phase B — Install inside the closed environment
 
@@ -582,6 +626,8 @@ On Windows (PowerShell): `qmd update; qmd embed` (step 2) and `py scripts\lint_v
 | `graphify query` warns "skill is from 0.8.36, package is 0.8.37"      | Skill/package version skew                                                                                                                   | Cosmetic — queries work; sync versions when convenient           |
 | `qmd embed`/`qmd query` tries to download a model offline             | `~/.cache/qmd/models/` incomplete                                                                                                            | Restore the full models dir from staging (Phase A3)              |
 | graphify subagent chunk file missing after extraction                 | Subagent dispatched as read-only `Explore` type                                                                                              | Always dispatch with `subagent_type="general-purpose"`           |
+| `qmd` fails after transfer: `better_sqlite3.node` missing / wrong ABI ("was compiled against a different Node.js version") | qmd carried across the gap as source (git) — native modules never compiled, or compiled for a different Node ABI | Carry the **install tree** built on a staging machine matching OS/arch/Node major (Phase A / A-variant), never bare source |
+| `qmd embed`/`query` fails with `qmd openai backend: ... failed against <url>` | API backend is fail-fast by design — endpoint down, wrong base URL, or wrong model name | Fix `QMD_OPENAI_*` env; verify with `qmd doctor`. Do NOT expect fallback to local models |
 
 **Windows equivalents for the fixes above:** alternate npm cache →
 `npm install --cache $env:TEMP\npmcache-qmd`; the corrupted cache itself lives at
