@@ -28,5 +28,11 @@ the embedding model, the graphify skill, the qmd plugin) transfer separately —
 `instructions.md` Phase A (stage) and Phase B (install). Then:
 
 1. Confirm Claude Code routes to the local model and no `GEMINI_API_KEY` is set.
+1b. **API backend (no-GPU environments):** if qmd is the `qmd-api` fork, confirm the
+    machine-wide env is set: `QMD_LLM=openai`, `QMD_OPENAI_BASE_URL`,
+    `QMD_OPENAI_EMBED_MODEL`, `QMD_OPENAI_CHAT_MODEL` (+ optional
+    `QMD_OPENAI_RERANK_MODEL`, `QMD_OPENAI_API_KEY`). Run `qmd doctor` — the
+    "openai backend" check must pass before registering collections. API failures
+    fail loudly by design; there is no local-model fallback.
 2. `python3 scripts/vault.py register` to add qmd collections and embed.
 3. `python3 scripts/vault.py check` — must exit 0.
