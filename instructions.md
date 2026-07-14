@@ -44,8 +44,9 @@ Moshe Vault/
 ├── eval/           TESTS   — VAULT_TESTS.md manual checklist. NEVER a qmd collection.
 ├── graphify-out/   ENGINE A — entity/relationship knowledge graph (graph.json,
 │                              graph.html, GRAPH_REPORT.md). Queried via `graphify query`.
-└── (qmd index)     ENGINE B — hybrid BM25 + vector search over raw/, wiki/, index/ (NOT eval/).
-                               Lives outside the vault in ~/.cache/qmd/. Queried via `qmd`.
+└── .qmd/           ENGINE B — hybrid BM25 + vector search over raw/, wiki/, index/ (NOT eval/).
+                               Vault-local: index.yml (collections + model pins, committed)
+                               + index.sqlite (derived index, gitignored). Queried via `qmd`.
 ```
 
 Why two engines: **qmd** answers "find me the note about X" (lexical + semantic document
@@ -192,6 +193,30 @@ Two safety behaviors:
   consumer edited it despite the read-only convention), `upgrade` copies it to
   `.vault-framework-backup/<old-version>/` and reports it before overwriting — nothing edited
   is silently lost.
+
+### Search-index state (`.qmd/`) — the one-place state policy
+
+`vault register` runs `qmd init` first, creating a **vault-local** `.qmd/` directory. qmd
+auto-discovers `.qmd/index.yml` from any cwd inside the vault and uses it instead of the
+global `~/.cache/qmd` index — so all vault state lives in the vault directory, and two
+vaults on one machine no longer collide on collection names.
+
+| File | Git | Why |
+|------|-----|-----|
+| `.qmd/index.yml` | **committed** | Declarative: collection registry + pinned embedding models |
+| `.qmd/index.sqlite` (+ `-shm`/`-wal`) | **ignored** (`.qmd/*.sqlite*`) | Derived binary; churns on every ingest; rebuildable |
+| `~/.cache/qmd/models/` | not vault state | Machine asset (like a compiler) — or the internal embedding API |
+
+Fresh clone → rebuild the index with one command:
+```bash
+cd <vault> && vault register        # qmd init + collection adds + qmd update + qmd embed
+```
+
+Migrating a pre-v0.2.0 vault (index still global):
+1. `cd <vault> && vault register` — creates `.qmd/`, registers collections locally, update + embed
+2. Append `.qmd/*.sqlite*` to the vault's `.gitignore`
+3. Commit `.qmd/index.yml`
+4. Optional hygiene: `qmd collection remove sources|concepts|indices` run from OUTSIDE the vault, to drop the old entries from the global registry
 
 ### Maintainer — cutting and shipping a release
 
@@ -681,6 +706,7 @@ macOS / Linux (bash):
 ```bash
 # Search index:
 cd "<Vault>"
+qmd init                                     # create the vault-local .qmd/ (registry + index)
 qmd collection add ./raw   --name sources
 qmd collection add ./wiki  --name concepts
 qmd collection add ./index --name indices
@@ -702,6 +728,7 @@ Windows (PowerShell) — only the search-index commands differ (`&&` → `;`); t
 and note-authoring guidance above is identical:
 ```powershell
 cd "<Vault>"
+qmd init                                     # create the vault-local .qmd/ (registry + index)
 qmd collection add ./raw   --name sources
 qmd collection add ./wiki  --name concepts
 qmd collection add ./index --name indices

@@ -34,5 +34,6 @@ the embedding model, the graphify skill, the qmd plugin) transfer separately —
     `QMD_OPENAI_RERANK_MODEL`, `QMD_OPENAI_API_KEY`). Run `qmd doctor` — the
     "openai backend" check must pass before registering collections. API failures
     fail loudly by design; there is no local-model fallback.
-2. `python3 scripts/vault.py register` to add qmd collections and embed.
+2. `python3 scripts/vault.py register` — creates the vault-local `.qmd/` index (`qmd init`),
+   adds the collections, and embeds. Commit `.qmd/index.yml`; the sqlite stays gitignored.
 3. `python3 scripts/vault.py check` — must exit 0.
