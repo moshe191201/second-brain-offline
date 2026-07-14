@@ -3,3 +3,4 @@
 graphify-out/.graphify_*
 __pycache__/
 *.pyc
+.qmd/*.sqlite*
