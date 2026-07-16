@@ -98,3 +98,71 @@ A failing `openai backend` check names the cause — missing `QMD_OPENAI_*` env,
 `QMD_OPENAI_BASE_URL`, or a model name absent from `/v1/models` — with the fix in the next
 step line. Once it's green, proceed to `python3 scripts/vault.py register` per the vault-setup
 skill's air-gapped bootstrap.
+
+## Variant: transferring via an internal Artifactory npm registry (instead of a raw tarball)
+
+Steps 5–7 above move a single pre-built tarball across the gap. If your org's policy is that
+everything installs *through* Artifactory rather than by untarring a blob, use this variant
+instead — but the underlying principle is identical: **build once where there's real internet,
+then ship the already-compiled result.** Don't try to make a fresh `npm install` succeed with
+scripts enabled inside the gap itself — it structurally can't.
+
+### Why a plain `npm install` (with or without `--ignore-scripts`) fails inside the gap
+
+`better-sqlite3`'s `install` script is `prebuild-install || node-gyp rebuild --release`. Both
+halves need network egress the gap doesn't have even when Artifactory is reachable:
+`prebuild-install` fetches a prebuilt binary from GitHub release assets; the `node-gyp` fallback
+compiles from source and typically also needs to fetch Node's header tarball from `nodejs.org`.
+Neither target is proxied by a typical Artifactory setup, so the script errors.
+
+- Running `npm install` with scripts **enabled** in the gap → the script errors outright.
+- Running `npm install --ignore-scripts` in the gap → the script is skipped instead of erroring,
+  but nothing produced `build/Release/better_sqlite3.node` either way. This is the same failure
+  as the original bare-`git`-clone bug, just reached from the Artifactory side instead.
+
+`--ignore-scripts` is not the fix here — it just changes a crash into a silent gap. The fix is to
+never need that script to run inside the gap at all.
+
+`sqlite-vec` needs none of this: it ships prebuilt binaries as ordinary per-platform
+**optionalDependencies** (`sqlite-vec-win32-x64`, etc.) with no install script — normal `npm`
+dependency resolution installs the right one regardless of `--ignore-scripts`. (The one flag that
+*would* break `sqlite-vec` is `--omit=optional` / `--no-optional` — don't use that here.)
+
+### Staging-side: build once, then re-publish the already-compiled result
+
+On the same connected staging machine as step 2 (scripts **enabled**, so the build actually
+succeeds there):
+
+```powershell
+npm install                                # scripts run here; this is where the .node file is produced
+Test-Path node_modules\better-sqlite3\build\Release\better_sqlite3.node   # must be True
+cd node_modules\better-sqlite3
+npm pack                                   # bundles the already-compiled binary as a plain file
+```
+
+Publish the resulting `better-sqlite3-<version>.tgz` to your internal Artifactory npm registry
+under the exact version `better-sqlite3` resolves to for this project (so it's what `npm install`
+picks up automatically, with no `package.json` changes needed on the consuming side). Repeat for
+`sqlite-vec-win32-x64` too if your org mirrors *all* packages through Artifactory rather than
+letting `--ignore-scripts`-safe optional deps reach the public registry directly — it needs no
+rebuild, just a straight re-publish of what's already on this machine.
+
+### Gap-side: install against Artifactory
+
+```powershell
+npm config set registry https://<your-artifactory-npm-registry>/
+npm install --ignore-scripts
+```
+
+This now succeeds correctly: `--ignore-scripts` still skips the (would-be-failing) install
+script, but it no longer matters, because the tarball you published already contains the
+compiled binary as ordinary package content — there's nothing left for the script to produce.
+Verify with the same check as step 4:
+
+```powershell
+$root = npm prefix -g
+node -e "require('$root\node_modules\@tobilu\qmd\node_modules\better-sqlite3'); console.log('better-sqlite3 OK')"
+```
+
+If this prints `OK`, proceed to the "Inside the gap" env-var setup and `qmd doctor` verification
+above exactly as in the tarball flow.
