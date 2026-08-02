@@ -32,11 +32,11 @@ Three lanes, all binary:
 | Lane | Who decides | Effect when it fires |
 |------|-------------|----------------------|
 | `gate` | Deterministic code | Auto-reject with a reason code. No human pre-approval. |
-| `evidence` | Deterministic code | Records a measured signal. Never decides alone. Feeds the judge and the review card. |
+| `evidence` | Deterministic code | Records a measurement. Never decides alone. Feeds the judge and the review card. |
 | `judge` | MiniMax M2.7, binary rubric | `in` stands, `out` stands, `cant_tell` → expert queue. Low-confidence → expert queue. |
 
 Gates run first and short-circuit: a gated document never reaches gist translation or
-the judge. Evidence signals are computed for every surviving document regardless of
+the judge. Evidence measurements are computed for every surviving document regardless of
 whether anything fires, because their absence is informative to the reviewer too.
 
 Rejections are never destructive. A rejected document keeps its ledger row, its
@@ -83,7 +83,7 @@ class Doc:
     source_path: str
 
 @dataclass(frozen=True)
-class Signal:
+class FilterDecision:
     filter_id: str
     version: int
     lane: Lane
@@ -92,7 +92,7 @@ class Signal:
     samples: tuple[str, ...] = ()            # short excerpts that triggered it
 
 @register(id="guid_filename_coverage", lane="gate", version=1)
-def guid_filename_coverage(doc: Doc) -> Signal:
+def guid_filename_coverage(doc: Doc) -> FilterDecision:
     """One-line summary mirrored into FILTERS.md."""
 ```
 
@@ -206,8 +206,10 @@ relevant yes/no, plus coarse domain. Then:
 
 ## Outputs
 
-- **Ledger events** — one event per signal (`doc_id, filter_id@version, lane, fired,
-  measures`), one decision event (`decision, decided_by, reason_code`), dedup links.
+- **Ledger events** — one event per filter decision (`doc_id, filter_id@version, lane,
+  fired, measures`), one document-decision event (`doc_decision, decided_by,
+  reason_code`), dedup links. "Filter decision" is per filter; "document decision" is
+  the accept/reject/queue outcome for the whole document.
 - **Batch filter report** — per-filter fire counts, decision breakdown, queue size,
   dedup statistics, audit results, and the measure distributions behind each `(fit)`
   threshold. Generated from ledger events alone.

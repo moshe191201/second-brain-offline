@@ -14,7 +14,7 @@ copy, docling conversion into `raw_md/`) are out of scope here and assumed worki
   closed-choice decisions against rubrics; scripts do all mechanical work; it never
   free-forms. Its autonomy per task is set empirically by Phase-0 calibration.
 - **Language:** Hebrew source → English vault. MiniMax is weak in Hebrew, strong in
-  English. Pre-translation stages must lean on language-light signals; full-document
+  English. Pre-translation stages must lean on language-light cues; full-document
   reasoning happens only on English text.
 - **Humans:** The domain expert is embedded (hours per day). Generous review gates are
   affordable and are the safety net for the weak model.
@@ -42,8 +42,8 @@ the pipeline learns them:
 | Genre / trust | `doc_type:`, `trust:` (tier from campaign plan) | Classification |
 | Knowledge level | `level:` (foundation → advanced) | Kickoff triage, refined at classification |
 
-Plus provenance: per-check signals, `decision` + `decided_by` (rule / model / human)
-on every doc, translation status, ingest status.
+Plus provenance: per-check results, `doc_decision` + `decided_by` (rule / model /
+human) on every doc, translation status, ingest status.
 
 ### Phase 0 — Calibration (once, at campaign-program start)
 
@@ -67,7 +67,7 @@ Each check is named and typed:
   snippet — e.g., a domain-scope check that catches "valid document type but out of
   domain," which no deterministic rule can.
 
-Every check writes its individual signal to the ledger. Checks run in three lanes:
+Every check writes its individual result to the ledger. Checks run in three lanes:
 **gate** (high-confidence deterministic auto-reject), **evidence** (deterministic
 annotations that inform the judge and the reviewer but never decide alone), and
 **judge** (binary MiniMax verdicts). Titles are known to be non-indicative — no
