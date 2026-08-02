@@ -182,8 +182,7 @@ write-back analyses per the existing query workflow.
   content from trusted authors on a permissioned platform inside an air gap; the
   client decided (2026-08-02) to spend nothing here. Do not reintroduce screening
   stages into the pipeline design.
-- **Stage 4 deep dive:** rule-pack format, decision routing, audit sampling,
-  borderline-queue UX.
+- **Stage 4 deep dive:** done — `2026-08-02-stage4-filtering-design.md`.
 - **Stage 5 deep dive:** translate skill design, term-detection heuristics, glossary
   schema, expert Q&A loop mechanics.
 - **Stage 6 deep dive:** taxonomy/questionnaire final form, classification prompts and
@@ -195,19 +194,21 @@ write-back analyses per the existing query workflow.
 - Stages 1–3 hardening (separately noted: community consensus prefers Confluence
   API/HTML extraction over PDF export — revisit when stages 1–3 return to scope).
 
-## Prior art — client repo (reuse targets)
+## Prior art — client repo (reference only)
 
 `second-brain-offline` PR #1 ("staged pipeline, review queue, live monitor, forensic
-eval harness") predates this design and already implements v0s of much of it: SQLite
-stage cache with instruction-hash invalidation, a non-blocking human review queue
-materialized as editable markdown files (list/apply/clean CLI, stage-order-aware
-re-runs), the translation stage (language detection, glossary injection, RTL-corruption
-detect-and-fix loop, unknown-term clarification under a zero-guessing rule),
-closed-vocabulary classification with new-category review, extra converters
-(Visio/OneNote/email), and a post-run eval/forensics harness. Stage deep dives should
-adapt these rather than rebuild. Known gaps vs this design: filtering depth (one
-heuristic), no dedup, no campaign layer, upsert-only state (no append-only events),
-path-keyed identity, per-doc LLM "truthness" scoring instead of trust-from-category.
+eval harness") predates this design and contains working prototypes touching several
+stages: a SQLite stage cache, a non-blocking markdown review queue, a translation stage
+(language detection, glossary injection, RTL-corruption fix loop, unknown-term
+clarification), closed-vocabulary classification with new-category review, extra
+converters (Visio/OneNote/email), and a post-run eval harness.
+
+**Policy (client decision, 2026-08-02):** it is an explicitly quick-and-dirty prototype
+and is treated as *evidence about the corpus and the problem*, not as a codebase to
+inherit. Each stage deep dive runs its own research pass first and designs on the
+merits; the prototype is then assessed against that design, per stage, and adapted only
+where it earns its place. Stage 4 has done this — see
+`2026-08-02-stage4-filtering-design.md` for what it took and what it rejected.
 
 ## Success criteria (pilot)
 
