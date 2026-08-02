@@ -42,8 +42,8 @@ the pipeline learns them:
 | Genre / trust | `doc_type:`, `trust:` (tier from campaign plan) | Classification |
 | Knowledge level | `level:` (foundation → advanced) | Kickoff triage, refined at classification |
 
-Plus provenance: `filter_score`, per-check signals, `method:` (rule / model / human)
-on every decision, translation status, ingest status.
+Plus provenance: per-check signals, `decision` + `decided_by` (rule / model / human)
+on every doc, translation status, ingest status.
 
 ### Phase 0 — Calibration (once, at campaign-program start)
 
@@ -66,15 +66,19 @@ Each check is named and typed:
 - **Reasoning:** MiniMax against a closed rubric on an excerpt or gist-translated
   snippet — e.g., a domain-scope check that catches "valid document type but out of
   domain," which no deterministic rule can.
-- **Security screen:** flag instruction-like content (prompt-injection risk) before any
-  agent reads a doc at ingest.
 
-Every check writes its individual signal to the ledger; `filter_score` is the weighted
-composite. Titles are known to be non-indicative — no decision rests on titles alone.
+Every check writes its individual signal to the ledger. Checks run in three lanes:
+**gate** (high-confidence deterministic auto-reject), **evidence** (deterministic
+annotations that inform the judge and the reviewer but never decide alone), and
+**judge** (binary MiniMax verdicts). Titles are known to be non-indicative — no
+decision rests on titles alone.
 
-Decision policy: **auto-reject only on high-confidence deterministic rules**; reasoning
-checks can only demote a doc into the expert's borderline queue, never silently discard.
-Rejected docs keep their ledger rows and artifacts forever (analyzable, reversible).
+Decision policy: **binary, no composite score** (client decision 2026-08-02). Gates
+auto-reject with a reason code and no human pre-approval. Judge checks return
+in / out / can't-tell: confident verdicts stand, low-confidence and can't-tell route
+to the expert review queue. A post-hoc audit sample (~5%) of all rejects goes to the
+expert each batch. Rejected docs keep their ledger rows and artifacts forever
+(analyzable, reversible).
 
 Coarse domain routing (multi-label allowed) uses source path, structural cues, and
 MiniMax on gist-translated title + opening lines, with the expert skimming the
@@ -167,14 +171,19 @@ write-back analyses per the existing query workflow.
 - Closed-choice decisions only: pick from a rubric, score against anchors, select from
   a frozen vocabulary. Never free-form synthesis into the wiki without the templates
   and blanks pattern already used by `vault.py`.
-- Every model decision is recorded with `method: model` and is demote-only in filtering
-  (cannot auto-discard). Autonomy per task is set by Phase-0 agreement rates and
-  revisited when the gold-sample regression eval is re-run.
+- Every model decision is recorded with `method: model` and is binary
+  (in / out / can't-tell) — never a numeric score. Low-confidence and can't-tell
+  verdicts route to the expert queue. Autonomy per task is set by Phase-0 agreement
+  rates and revisited when the gold-sample regression eval is re-run.
 
 ## Out of scope / deferred to per-stage deep dives
 
-- **Stage 4 deep dive:** rule-pack format, score weighting/thresholds, borderline-queue
-  UX, injection-screen specifics.
+- **Security / prompt-injection screening: deliberately none.** The corpus is trusted
+  content from trusted authors on a permissioned platform inside an air gap; the
+  client decided (2026-08-02) to spend nothing here. Do not reintroduce screening
+  stages into the pipeline design.
+- **Stage 4 deep dive:** rule-pack format, decision routing, audit sampling,
+  borderline-queue UX.
 - **Stage 5 deep dive:** translate skill design, term-detection heuristics, glossary
   schema, expert Q&A loop mechanics.
 - **Stage 6 deep dive:** taxonomy/questionnaire final form, classification prompts and
@@ -186,6 +195,20 @@ write-back analyses per the existing query workflow.
 - Stages 1–3 hardening (separately noted: community consensus prefers Confluence
   API/HTML extraction over PDF export — revisit when stages 1–3 return to scope).
 
+## Prior art — client repo (reuse targets)
+
+`second-brain-offline` PR #1 ("staged pipeline, review queue, live monitor, forensic
+eval harness") predates this design and already implements v0s of much of it: SQLite
+stage cache with instruction-hash invalidation, a non-blocking human review queue
+materialized as editable markdown files (list/apply/clean CLI, stage-order-aware
+re-runs), the translation stage (language detection, glossary injection, RTL-corruption
+detect-and-fix loop, unknown-term clarification under a zero-guessing rule),
+closed-vocabulary classification with new-category review, extra converters
+(Visio/OneNote/email), and a post-run eval/forensics harness. Stage deep dives should
+adapt these rather than rebuild. Known gaps vs this design: filtering depth (one
+heuristic), no dedup, no campaign layer, upsert-only state (no append-only events),
+path-keyed identity, per-doc LLM "truthness" scoring instead of trust-from-category.
+
 ## Success criteria (pilot)
 
 - First campaign end-to-end: filtered, translated, classified, ingested, and passing
@@ -194,5 +217,6 @@ write-back analyses per the existing query workflow.
 - Ledger can answer, for any doc: where it is, every decision made about it, by which
   method, and why.
 - A failed stage run is recoverable by re-running with zero manual file surgery.
-- Filter-score distribution analysis is possible retroactively from the ledger alone.
+- Filter decision analysis (per-rule fire counts, decision/queue breakdowns) is
+  possible retroactively from the ledger alone.
 - Gold-sample regression eval is re-runnable at any time inside the gap.
