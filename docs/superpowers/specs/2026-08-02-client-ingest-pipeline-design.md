@@ -10,9 +10,11 @@ copy, docling conversion into `raw_md/`) are out of scope here and assumed worki
 
 ## Constraints (load-bearing)
 
-- **In-gap model:** MiniMax M2.7 only — "barely capable." It makes narrow,
-  closed-choice decisions against rubrics; scripts do all mechanical work; it never
-  free-forms. Its autonomy per task is set empirically by Phase-0 calibration.
+- **In-gap models:** MiniMax M2.7 (general reasoning; "barely capable" — makes narrow,
+  closed-choice decisions against rubrics, never free-forms) and **Dicta-LM 3.0 24B**, a
+  Hebrew-specialized model available on the same OpenAI-compatible API as `qmd-api` and
+  used for all Hebrew-side work. Scripts do all mechanical work. Per-task autonomy is
+  set empirically by Phase-0 calibration.
 - **Language:** Hebrew source → English vault. MiniMax is weak in Hebrew, strong in
   English. Pre-translation stages must lean on language-light cues; full-document
   reasoning happens only on English text.
@@ -183,8 +185,7 @@ write-back analyses per the existing query workflow.
   client decided (2026-08-02) to spend nothing here. Do not reintroduce screening
   stages into the pipeline design.
 - **Stage 4 deep dive:** done — `2026-08-02-stage4-filtering-design.md`.
-- **Stage 5 deep dive:** translate skill design, term-detection heuristics, glossary
-  schema, expert Q&A loop mechanics.
+- **Stage 5 deep dive:** done — `2026-08-03-stage5-translation-design.md`.
 - **Stage 6 deep dive:** taxonomy/questionnaire final form, classification prompts and
   rubrics, spot-check sampling math.
 - **Stage 7 deep dive:** ingest-strategy artifact format, batch `vault-ingest`
