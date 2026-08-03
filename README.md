@@ -1,12 +1,33 @@
-# Second Brain Offline
+# Second Brain Vault Framework
 
-A local, AI-operable **knowledge vault** — an Obsidian-style "second brain" that turns raw
-source clippings into atomic, cross-linked notes you can search and traverse, with the whole
-workflow driven by Claude Code skills and a deterministic CLI.
+Build a local, AI-operable **knowledge vault** — an Obsidian-style "second brain" that turns
+raw source clippings into atomic, cross-linked notes you can search and traverse, with the
+whole workflow driven by Claude Code skills and a deterministic CLI.
 
 Inspired by Andrej Karpathy's *llm-wiki* idea: immutable sources, synthesized knowledge, and
 a schema the LLM follows — built to run fully offline (including air-gapped) on minimal local
 models.
+
+## Framework vs. vault
+
+This repo is the **framework**. A **vault** is a normal folder you own, anywhere on disk.
+
+```bash
+pip install second-brain-vault-framework
+vault scaffold "My Vault"     # lay down the framework into a new vault
+cd "My Vault"                 # drop clippings into raw/ and ingest
+```
+
+Later, when a new framework version ships:
+
+```bash
+pip install --upgrade second-brain-vault-framework
+vault upgrade .               # re-lays framework files; never touches your content
+```
+
+Framework files are replaced wholesale on upgrade; your `raw/`, `wiki/`, and `index/` are
+never read or written. The one editable region inside a framework file is the USER ZONE block
+in `CLAUDE.md`, which is preserved verbatim across upgrades.
 
 ## Three-layer model
 
@@ -16,21 +37,22 @@ models.
 | Knowledge | `wiki/` | Atomic concept notes (one idea each) + `wiki/sources/` per-source summaries. |
 | Navigation | `index/` | Map of content, source registry, log, key takeaways. |
 
-`eval/` holds test fixtures and is **never** indexed for search.
+`tests/` holds the eval checklist and is **never** indexed for search — gold answers must not
+contaminate retrieval.
 
 ## Two local engines
 
 - **[qmd](https://www.npmjs.com/package/@tobilu/qmd)** — hybrid BM25 + vector search. *"Find me the note about X."*
 - **graphify** — entity/relationship knowledge graph. *"How does X relate to Y?"*
 
-Both run fully locally. See [`instructions.md`](instructions.md) for the full build and
-air-gapped replication runbook.
+Both run fully locally. `example_vault/instructions.md` is the full build and air-gapped
+replication runbook; `qmd-api/` covers staging the OpenAI-backend qmd fork for a no-GPU gap.
 
 ## How you work with it
 
-The vault carries its own operating manual. When you run Claude Code in this folder it loads
-[`CLAUDE.md`](CLAUDE.md) (the schema + the rule to always ground answers in the vault) and four
-skills, each backed by the deterministic CLI `scripts/vault.py`:
+A vault carries its own operating manual. Running Claude Code in a vault loads its
+`CLAUDE.md` (the schema + the rule to always ground answers in the vault) and four skills,
+each backed by the deterministic CLI:
 
 | Skill | Use it to | CLI it wraps |
 |-------|-----------|--------------|
@@ -41,44 +63,28 @@ skills, each backed by the deterministic CLI `scripts/vault.py`:
 
 The CLI does the mechanical work (scaffolding, stubs, registry/log, validation); you only
 fill in note bodies. `vault check` is **fail-closed** — it exits non-zero on broken links,
-orphans, or unfilled stubs, so a half-done vault never looks finished.
+orphans, unfilled stubs, or framework drift, so a half-done vault never looks finished.
 
-## Quick start
+## Repo layout
+
+```
+docs/                              mkdocs site — user guide + design specs and plans
+example_vault/                     a real vault built by the current payload (CI-verified)
+qmd-api/                           staging + install scripts for the qmd OpenAI-backend fork
+src/second_brain_vault_framework/  the pip package (core · cli · manifest · payload)
+tests/                             stdlib unittest suite for the package
+```
+
+`example_vault/` is living documentation: CI fails if it drifts from the payload, so what
+you see there is exactly what `vault scaffold` produces today.
+
+## Development
 
 ```bash
-# Health-check the vault (deterministic; exits non-zero on any finding)
-python3 scripts/vault.py check          # Windows: py scripts\vault.py check
-
-# See per-clipping ingest state
-python3 scripts/vault.py status
-
-# Ingest a new clipping (then fill the note bodies it stubs out)
-python3 scripts/vault.py ingest raw/<your-clipping>.md
-
-# Run the test suite for the CLI itself
-python3 -m unittest discover -s tests
+pip install -e .
+python -m unittest discover -s tests
+vault check example_vault
 ```
 
-To search once the index is built: `qmd search "<terms>"` /
-`graphify query "<question>"` (see [`CLAUDE.md`](CLAUDE.md) for the full query workflow).
-
-## Layout
-
-```
-CLAUDE.md            schema + grounding rule + workflows (loaded every session)
-instructions.md      full build record + air-gapped replication runbook
-raw/  wiki/  index/  the three layers
-eval/                manual test checklist (never indexed)
-scripts/             vault.py (CLI) · lint_vault.py · templates/
-.claude/skills/      vault-setup · vault-ingest · vault-query · vault-lint
-tests/               stdlib unittest suite for the CLI
-```
-
-## Creating a new vault
-
-```bash
-python3 scripts/vault.py scaffold "My New Vault"
-```
-
-This stamps out the full layout (including the CLI, skills, and templates) so the new vault is
-self-contained and can itself scaffold others. Drop clippings into its `raw/` and ingest.
+Edit framework files in `src/second_brain_vault_framework/payload/` — never directly in
+`example_vault/` — then run `vault upgrade example_vault` and commit the result.

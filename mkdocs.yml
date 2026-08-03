@@ -1,0 +1,49 @@
+site_name: Second Brain Vault Framework
+site_description: An AI-operable knowledge vault that runs fully offline, including air-gapped.
+docs_dir: docs
+use_directory_urls: true
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: { icon: material/weather-sunny, name: Light mode }
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.superfences
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - User guide:
+      - Getting started: superpowers/user/getting-started.md
+      - Working a vault: superpowers/user/working-a-vault.md
+      - Air-gapped install: superpowers/user/air-gapped-install.md
+      - Upgrading the framework: superpowers/user/upgrading.md
+  - Design specs:
+      - Vault improvements & eval: superpowers/specs/2026-06-11-vault-improvements-and-eval-design.md
+      - Skill suite (air-gapped): superpowers/specs/2026-06-15-vault-skill-suite-airgapped-design.md
+      - qmd OpenAI backend: superpowers/specs/2026-07-09-qmd-openai-backend-design.md
+      - Package distribution: superpowers/specs/2026-07-12-vault-framework-package-distribution-design.md
+      - Local qmd state: superpowers/specs/2026-07-13-vault-local-qmd-state-design.md
+      - Client ingest pipeline: superpowers/specs/2026-08-02-client-ingest-pipeline-design.md
+      - Stage-4 filtering: superpowers/specs/2026-08-02-stage4-filtering-design.md
+      - Stage-5 translation: superpowers/specs/2026-08-03-stage5-translation-design.md
+  - Implementation plans:
+      - Vault improvements & eval: superpowers/plans/2026-06-11-vault-improvements-and-eval.md
+      - Vault skill suite: superpowers/plans/2026-06-15-vault-skill-suite.md
+      - qmd OpenAI backend: superpowers/plans/2026-07-09-qmd-openai-backend.md
+      - Framework package: superpowers/plans/2026-07-12-vault-framework-package.md
+      - Local qmd state: superpowers/plans/2026-07-13-vault-local-qmd-state.md

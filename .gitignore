@@ -1,6 +1,19 @@
-.obsidian/
 .DS_Store
-graphify-out/.graphify_*
+.obsidian/
 __pycache__/
 *.pyc
-.qmd/*.sqlite*
+
+# Build / docs output
+dist/
+build/
+*.egg-info/
+public/
+site/
+
+# Derived qmd index — example_vault/.qmd/index.yml IS committed.
+**/.qmd/*.sqlite*
+
+# Written by `vault upgrade` when a framework-owned file drifted.
+**/.vault-framework-backup/
+
+**/graphify-out/.graphify_*

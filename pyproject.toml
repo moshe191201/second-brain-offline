@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "second-brain-vault-framework"
+version = "0.1.0"
+description = "Tool + payload that builds, lints, and upgrades AI-operable knowledge vaults — offline and air-gap ready."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Moshe Elias" }]
+keywords = ["knowledge-base", "obsidian", "second-brain", "air-gapped", "rag"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+# Pure stdlib on purpose: the CLI must run inside an air gap with nothing installed.
+dependencies = []
+
+[project.optional-dependencies]
+docs = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
+
+[project.scripts]
+vault = "second_brain_vault_framework.cli:main"
+
+[tool.hatch.build.targets.wheel]
+# The whole package directory ships, payload included — which is why the skill tree
+# is `payload/dot-claude/`, not `payload/.claude/`: build backends skip dot-dirs.
+packages = ["src/second_brain_vault_framework"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/second_brain_vault_framework",
+    "tests",
+    "README.md",
+    "pyproject.toml",
+]

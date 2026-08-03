@@ -1,0 +1,27 @@
+{
+  "framework_version": "0.1.0",
+  "vault_name": "Example",
+  "installed_at": "2026-08-03T13:30:26",
+  "manifest": {
+    "framework_version": "0.1.0",
+    "owned_paths": [
+      "CLAUDE.md",
+      "instructions.md",
+      ".claude/skills/vault-setup/SKILL.md",
+      ".claude/skills/vault-ingest/SKILL.md",
+      ".claude/skills/vault-query/SKILL.md",
+      ".claude/skills/vault-lint/SKILL.md",
+      "scripts/vault.py",
+      "scripts/check_vault_answer.py"
+    ],
+    "scaffold_only_paths": [
+      "tests/VAULT_TESTS.md"
+    ],
+    "user_zones": {
+      "CLAUDE.md": {
+        "start": "<!-- USER ZONE START -->",
+        "end": "<!-- USER ZONE END -->"
+      }
+    }
+  }
+}

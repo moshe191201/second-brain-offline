@@ -1,12 +1,12 @@
 # tests/test_vault.py
-import importlib.util
+import json
 import unittest
 from pathlib import Path
 
+from second_brain_vault_framework import core as vault
+
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("vault", ROOT / "scripts" / "vault.py")
-vault = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(vault)
+PAYLOAD = vault.payload_root()
 
 
 class TestHelpers(unittest.TestCase):
@@ -47,7 +47,7 @@ class TestTemplates(unittest.TestCase):
 
     def test_skill_frontmatter_valid(self):
         for name in self.SKILLS:
-            path = vault.TEMPLATES_DIR / "skills" / name / "SKILL.md"
+            path = PAYLOAD / "dot-claude" / "skills" / name / "SKILL.md"
             self.assertTrue(path.exists(), f"missing {path}")
             text = path.read_text(encoding="utf-8")
             self.assertTrue(text.startswith("---\n"), f"{name}: no frontmatter fence")
@@ -58,7 +58,7 @@ class TestTemplates(unittest.TestCase):
 
     def test_skill_has_minimal_path(self):
         for name in self.SKILLS:
-            text = (vault.TEMPLATES_DIR / "skills" / name / "SKILL.md").read_text("utf-8")
+            text = (PAYLOAD / "dot-claude" / "skills" / name / "SKILL.md").read_text("utf-8")
             self.assertIn("Minimal-model path", text, f"{name}: missing minimal path")
 
 
@@ -72,14 +72,15 @@ class TestScaffold(unittest.TestCase):
             rc = vault.cmd_scaffold(root, "Test Vault")
             self.assertEqual(rc, 0)
             v = root / "Test Vault"
-            for sub in ["raw", "wiki", "wiki/sources", "index", "eval", "scripts",
+            for sub in ["raw", "wiki", "wiki/sources", "index", "tests", "scripts",
                         ".claude/skills/vault-ingest"]:
                 self.assertTrue((v / sub).is_dir(), f"missing dir {sub}")
             self.assertTrue((v / "CLAUDE.md").exists())
             self.assertIn("Test Vault", (v / "CLAUDE.md").read_text("utf-8"))
             self.assertTrue((v / "scripts/vault.py").exists())
-            self.assertTrue((v / "scripts/templates/CLAUDE.md").exists(),
-                            "templates must travel for self-replication")
+            self.assertTrue((v / "scripts/check_vault_answer.py").exists())
+            self.assertTrue((v / "tests/VAULT_TESTS.md").exists(),
+                            "scaffold-only paths must land too")
             self.assertTrue((v / ".claude/skills/vault-ingest/SKILL.md").exists())
             for stem in ["_map-of-content", "source-registry", "log", "key-takeaways"]:
                 self.assertTrue((v / "index" / f"{stem}.md").exists(), stem)
@@ -189,7 +190,7 @@ class TestCheck(unittest.TestCase):
 
 
 class TestRegister(unittest.TestCase):
-    def test_register_excludes_eval(self):
+    def test_register_excludes_tests(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             vault.cmd_scaffold(root, "V")
@@ -205,7 +206,7 @@ class TestRegister(unittest.TestCase):
             self.assertIn("collection add ./raw", flat)
             self.assertIn("collection add ./wiki", flat)
             self.assertIn("collection add ./index", flat)
-            self.assertNotIn("eval", flat)  # eval/ must never be registered
+            self.assertNotIn("tests", flat)  # tests/ must never be registered
             self.assertIn("qmd update", flat)
             self.assertIn("qmd embed", flat)
 
@@ -232,6 +233,129 @@ class TestStatus(unittest.TestCase):
             row = [ln for ln in out.splitlines() if ln.startswith("sample-clipping")][0]
             self.assertIn("yes", row)       # summary detected via title-slug
             self.assertNotIn("NO", row)     # registry + log also present
+
+
+class TestUserZone(unittest.TestCase):
+    START, END = "<!-- USER ZONE START -->", "<!-- USER ZONE END -->"
+
+    def test_extract_and_inject_roundtrip(self):
+        text = f"head\n{self.START}\nmine\n{self.END}\ntail\n"
+        zone = vault.extract_user_zone(text, self.START, self.END)
+        self.assertEqual(zone, "\nmine\n")
+        fresh = f"NEW head\n{self.START}\n{self.END}\nNEW tail\n"
+        out = vault.inject_user_zone(fresh, self.START, self.END, zone)
+        self.assertIn("mine", out)
+        self.assertIn("NEW head", out)
+
+    def test_extract_returns_none_when_markers_absent(self):
+        self.assertIsNone(vault.extract_user_zone("no markers\n", self.START, self.END))
+
+    def test_extract_returns_none_when_markers_reversed(self):
+        text = f"{self.END}\nmine\n{self.START}\n"
+        self.assertIsNone(vault.extract_user_zone(text, self.START, self.END))
+
+    def test_inject_into_unmarked_payload_is_a_noop(self):
+        self.assertEqual(vault.inject_user_zone("plain\n", self.START, self.END, "z"), "plain\n")
+
+
+class TestUpgrade(unittest.TestCase):
+    def _vault(self, d):
+        root = Path(d)
+        vault.cmd_scaffold(root, "V")
+        return root / "V"
+
+    def test_upgrade_is_idempotent_and_leaves_no_backup(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            before = (v / "CLAUDE.md").read_text("utf-8")
+            self.assertEqual(vault.cmd_upgrade(v), 0)
+            self.assertEqual((v / "CLAUDE.md").read_text("utf-8"), before)
+            self.assertFalse((v / vault.BACKUP_DIR).exists(),
+                             "a clean vault must not be reported as drifted")
+
+    def test_upgrade_preserves_user_zone(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            claude = v / "CLAUDE.md"
+            claude.write_text(claude.read_text("utf-8").replace(
+                "<!-- USER ZONE START -->", "<!-- USER ZONE START -->\nMY LOCAL RULE"), "utf-8")
+            vault.cmd_upgrade(v)
+            self.assertIn("MY LOCAL RULE", claude.read_text("utf-8"))
+
+    def test_upgrade_never_touches_content(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            note = v / "wiki" / "mine.md"
+            note.write_text("my content\n", "utf-8")
+            vault.cmd_upgrade(v)
+            self.assertEqual(note.read_text("utf-8"), "my content\n")
+
+    def test_upgrade_backs_up_a_drifted_framework_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            skill = v / ".claude/skills/vault-lint/SKILL.md"
+            skill.write_text("hand-edited\n", "utf-8")
+            vault.cmd_upgrade(v)
+            backup = v / vault.BACKUP_DIR / vault.framework_version() / \
+                ".claude/skills/vault-lint/SKILL.md"
+            self.assertTrue(backup.exists(), "edited file must be backed up, not lost")
+            self.assertEqual(backup.read_text("utf-8"), "hand-edited\n")
+            self.assertNotEqual(skill.read_text("utf-8"), "hand-edited\n")
+
+    def test_upgrade_does_not_relay_scaffold_only_paths(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            tests_md = v / "tests" / "VAULT_TESTS.md"
+            tests_md.write_text("my own gold answers\n", "utf-8")
+            vault.cmd_upgrade(v)
+            self.assertEqual(tests_md.read_text("utf-8"), "my own gold answers\n",
+                             "a vault's eval is rewritten per corpus; upgrade must not clobber it")
+
+    def test_upgrade_removes_orphaned_framework_files_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            # Pretend the previous version shipped a file this one no longer does,
+            # alongside a content file with a similar name.
+            orphan = v / "scripts" / "gone.py"
+            orphan.write_text("old\n", "utf-8")
+            keeper = v / "wiki" / "gone.md"
+            keeper.write_text("content\n", "utf-8")
+            stamp = json.loads((v / vault.STAMP_FILE).read_text("utf-8"))
+            stamp["manifest"]["owned_paths"].append("scripts/gone.py")
+            (v / vault.STAMP_FILE).write_text(json.dumps(stamp), "utf-8")
+
+            vault.cmd_upgrade(v)
+            self.assertFalse(orphan.exists(), "orphaned framework file must be removed")
+            self.assertTrue(keeper.exists(), "content is never a deletion candidate")
+
+    def test_upgrade_handles_a_vault_with_no_stamp(self):
+        with tempfile.TemporaryDirectory() as d:
+            v = self._vault(d)
+            (v / vault.STAMP_FILE).unlink()
+            self.assertEqual(vault.cmd_upgrade(v), 0)
+            stamp = json.loads((v / vault.STAMP_FILE).read_text("utf-8"))
+            self.assertEqual(stamp["framework_version"], vault.framework_version())
+
+
+class TestManifest(unittest.TestCase):
+    def test_every_manifest_path_exists_in_the_payload(self):
+        manifest = vault.load_manifest()
+        for rel in manifest["owned_paths"] + manifest.get("scaffold_only_paths", []):
+            self.assertTrue(vault.payload_path_for(rel).exists(),
+                            f"{rel} is in the manifest but missing from the payload")
+
+    def test_manifest_version_matches_package(self):
+        self.assertEqual(vault.load_manifest()["framework_version"], vault.framework_version())
+
+    def test_manifest_claims_no_content_paths(self):
+        for rel in vault.load_manifest()["owned_paths"]:
+            self.assertFalse(rel.startswith(("raw/", "wiki/", "index/", "graphify-out/")),
+                             f"{rel} is content — the framework must never own it")
+
+    def test_dot_claude_paths_map_into_the_payload(self):
+        p = vault.payload_path_for(".claude/skills/vault-lint/SKILL.md")
+        self.assertIn("dot-claude", str(p))
+        self.assertTrue(p.exists())
 
 
 if __name__ == "__main__":

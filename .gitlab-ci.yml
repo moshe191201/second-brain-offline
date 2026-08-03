@@ -1,0 +1,49 @@
+# Framework CI. Every stage is offline-safe except `pages`, which only needs the
+# docs extras — mirroring the air gap the framework itself has to survive in.
+
+stages: [test, example, build, pages]
+
+default:
+  image: python:3.12-slim
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install -e .
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+unit:
+  stage: test
+  script:
+    - python -m unittest discover -s tests -v
+
+# example_vault/ is living documentation: it must always be a valid vault built
+# by the *current* payload. If a payload change isn't laid down into it, the
+# stamp/drift check in `vault check` fails here and not in a consumer's repo.
+example-vault:
+  stage: example
+  script:
+    - vault check example_vault
+    - git diff --exit-code example_vault
+      || (echo "example_vault is stale — run 'vault upgrade example_vault' and commit." && exit 1)
+
+wheel:
+  stage: build
+  script:
+    - pip install build
+    - python -m build
+    # Prove the payload actually made it into the wheel.
+    - python -c "import zipfile,glob,sys; n=[f for f in zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist() if '/payload/' in f]; print(len(n),'payload files'); sys.exit(0 if len(n)>=8 else 1)"
+  artifacts:
+    paths: [dist/]
+    expire_in: 1 month
+
+pages:
+  stage: pages
+  script:
+    - pip install -e ".[docs]"
+    - mkdocs build --site-dir public
+  artifacts:
+    paths: [public]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

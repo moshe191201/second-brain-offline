@@ -1,0 +1,11 @@
+.DS_Store
+.obsidian/
+graphify-out/.graphify_*
+__pycache__/
+*.pyc
+
+# Derived qmd index — index.yml (collections + model pins) IS committed.
+.qmd/*.sqlite*
+
+# Written by `vault upgrade` when a framework-owned file drifted.
+.vault-framework-backup/
