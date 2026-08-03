@@ -1,121 +1,60 @@
-# CLAUDE.md — Vault Schema
+# CLAUDE.md — Framework Repo
 
-> Full replication runbook: `instructions.md` · Design spec: `docs/superpowers/specs/2026-06-11-vault-improvements-and-eval-design.md`
-> Operating skills: `.claude/skills/vault-*` · CLI: `scripts/vault.py`
-> STRICTNESS: MINIMAL   <!-- MINIMAL = deterministic-only. CAPABLE = enable self-review. -->
+This repo is the **framework**, not a vault. A vault is a user-owned folder the framework
+writes into. `example_vault/` is the one vault that lives here, as living documentation.
 
-## Three-layer model
+> Design specs: `docs/superpowers/specs/` · Plans: `docs/superpowers/plans/`
+> Vault schema (for work *inside* a vault): `example_vault/CLAUDE.md`
 
-| Layer | Folder | Rule |
-|-------|--------|------|
-| Source | `raw/` | **Immutable.** Never edit, rename, or delete. |
-| Knowledge | `wiki/` | Atomic synthesized notes. One concept per file. |
-| Navigation | `index/` | Maps, registry, log, takeaways. |
+## Layout
 
-`eval/` — test fixtures. **Never register as a qmd collection.**
-
-## Answering questions about this vault's domain
-
-When asked any question this vault could plausibly cover, you **MUST** consult the
-vault before answering — never answer from prior knowledge alone.
-
-1. Run the **Query** workflow below (qmd first, graphify for multi-hop) before writing an answer.
-2. Ground every claim in retrieved notes and cite the note or its raw source.
-3. If the vault does **not** cover it, say so explicitly. Do not fill the gap from
-   training data and present it as if it came from the vault. (This is exactly what
-   the T2 negative-control tests in `eval/VAULT_TESTS.md` verify.)
-
-## Note conventions
-
-- Filename: `kebab-case.md` (concept notes), `wiki/sources/slug.md` (summaries)
-- Frontmatter required: `title`, `type` (concept | source-summary | analysis | index), `tags`, `sources` (wikilinks to raw clippings) — index-type notes exempt from `sources`
-- Wikilinks over raw URLs for internal references
-- One concept per note; **update existing notes before creating new ones**
-- Search qmd first — never create a duplicate
-
-### Note template (concept)
-
-```yaml
----
-title: "<Title>"
-type: concept
-tags: [tag1, tag2]
-sources:
-  - "[[Raw Clipping Filename Without Extension]]"
----
-
-# Title
-
-**One-sentence thesis in bold.**
-
-Body. Dense [[wikilinks]] to sibling notes.
-
-## Related
-[[note-a]] · [[note-b]]
+```
+docs/                              mkdocs site — user guide + specs/plans
+example_vault/                     a real vault, built by the current payload (CI-verified)
+qmd-api/                           staging + install scripts for the qmd OpenAI-backend fork
+src/second_brain_vault_framework/  the pip package
+  ├── core.py                      every subcommand's implementation
+  ├── cli.py                       `vault` entry point (argparse only)
+  ├── manifest.json                what the framework owns in a vault + user-zone markers
+  └── payload/                     the files laid down into a vault
+tests/                             stdlib unittest suite for the package
 ```
 
-### Note template (source-summary)
+## The one rule that explains the layout
 
-```yaml
----
-title: "Summary — <Article Title>"
-type: source-summary
-tags: [tag1]
-sources:
-  - "[[Raw Clipping Filename]]"
-published: YYYY-MM-DD
----
+**`payload/` is the source of truth; `example_vault/` is an artifact.**
 
-# Summary — <Article Title>
+Never edit a framework-owned file inside `example_vault/` directly. Edit it in
+`src/second_brain_vault_framework/payload/`, then re-lay it:
 
-**One-sentence thesis.**
-
-~200 words: what the article argues.
-
-## Key claims
-- claim → [[derived-concept-note]]
-
-## Derived concept notes
-[[note-a]] · [[note-b]]
+```bash
+vault upgrade example_vault
 ```
 
-## Safety rules
+CI enforces this: the `example-vault` stage runs `vault check example_vault` and fails if
+`vault upgrade` would produce a diff. A payload edit that isn't laid down is a broken build.
 
-- Never invent provenance, dates, authors, or claims
-- Never collapse distinct concepts into one note
-- Never create a duplicate — search qmd first, then update
-- Mark uncertain extraction as uncertain and link to source
+Which paths are framework-owned is defined in `manifest.json` — nowhere else. Adding a file
+to the payload means adding it to `owned_paths` too, or `upgrade` will never install it.
 
-## Workflow — Ingest (new raw/ clipping)
+## Path mapping
 
-1. `qmd search "<title keywords>" -n 5` — find existing related notes
-2. Create `wiki/sources/<slug>.md` (source-summary template)
-3. Create or update concept notes in `wiki/`
-4. Update `index/_map-of-content.md` and `index/source-registry.md`
-5. Append to `index/log.md`: `## [YYYY-MM-DD] ingest | <title>`
-6. `qmd update && qmd embed`
-7. `graphify raw/ --update` (re-extracts only changed files)
+`payload/dot-claude/` → `.claude/` in the vault. The rename exists because packaging backends
+skip dot-directories; `core.payload_path_for()` is the only place that translation happens.
 
-## Workflow — Query
+## Conventions
 
-1. `qmd search "<terms>" -n 5` for fast keyword lookup
-2. `qmd query` with intent/lex/vec fields for conceptual questions
-3. `graphify query "<question>"` for multi-hop entity traversal
-4. `qmd get "#docid"` to fetch full document before making claims
-5. **Write-back rule:** if answering produces novel cross-source synthesis
-   not already in any note → save as `wiki/<slug>.md` with `type: analysis`,
-   list source notes in `sources:`, link from MOC "Analyses" section,
-   append `## [YYYY-MM-DD] analysis | <title>` to `index/log.md`
+- **Pure stdlib.** The CLI must run inside an air gap with nothing installed. No runtime deps
+  in `pyproject.toml`, ever. Docs/build extras are fine.
+- **Fail closed.** `vault check` exits non-zero on any finding. Never soften it to a warning.
+- **`tests/VAULT_TESTS.md` in a vault is never a qmd collection** — gold answers must not
+  contaminate retrieval. `core.cmd_register` deliberately omits it.
+- Version lives in `pyproject.toml` and `__init__.__version__`; `manifest.json` carries a
+  copy for the vault stamp. Bump all three together.
 
-## Skills
+## Before calling work done
 
-- New/changed `raw/` clipping → **vault-ingest**.
-- Domain question → **vault-query** (enforces the grounding rule above).
-- Health check before "done" → **vault-lint** (`python3 scripts/vault.py check`).
-- New/air-gapped vault setup → **vault-setup**.
-
-## Workflow — Lint
-
-1. `python3 scripts/lint_vault.py` — fix all findings before proceeding
-2. LLM pass: scan `wiki/` for contradictions between notes and stale claims
-3. Re-run until exit 0
+```bash
+python -m unittest discover -s tests
+vault check example_vault
+```
