@@ -40,17 +40,52 @@ cite them, so don't renumber.
 > *Why: the domain is the top-level partition of the vault. Domains are learned
 > separately but queried together, so the boundaries decide what gets built when.*
 
-### A1 — What domains does this team's knowledge cover?
-List them with a one-line description each. A domain is a body of knowledge someone
-could be expert in, not an organizational unit.
+### How to decide what is a domain and what is a subdomain
 
-| Domain | One-line description | In scope for the vault? |
-|--------|---------------------|------------------------|
-| | | |
+Do not try to settle this by subject matter — that argument has no end. Decide it by
+**which artifacts the pipeline would have to duplicate.** Each domain gets exactly one
+of each of these:
+
+- a scope card (what belongs, what does not)
+- a glossary and translation policy
+- a trust map (which sources win when documents disagree)
+- a concept namespace in the wiki
+- an acceptance test (the questions it must answer)
+
+**The test:** if two candidate areas would share all five, they are **one domain with two
+subdomains**. If they would genuinely need different glossaries, different reading
+conventions, and different trust maps, they are **two domains**.
+
+Three corollaries that resolve most arguments:
+
+1. **Size is not a criterion.** A domain that is too big to process at once stays one
+   domain and is processed in several ordered work units. Splitting a domain to make it
+   smaller duplicates its shared core, which is the outcome you least want.
+2. **"You need A to understand B" means A and B are in the same domain**, ordered
+   foundational-first — or A is a separate domain that B *hard-depends* on (A6). Mutual
+   prerequisite knowledge is the strongest evidence of a single domain.
+3. **Teams are not domains, and depth is not a domain.** Several teams may work across
+   the same domain, and the same domain may be known at different depths by different
+   audiences. Depth is recorded per note as a knowledge level, never as a separate
+   domain — otherwise the same concept exists twice.
+
+### A1 — What domains does the vault need to cover?
+Build this list from **several independent angles**, not one pass — the point is to catch
+what a single top-down attempt forgets. Work through each angle, then merge:
+
+- **From the business:** what does this campaign do, what are its outputs and missions?
+- **From the corpus:** what do the source folders, space trees, and recurring title terms
+  cluster into? Include clusters that match no domain you had thought of.
+- **From the people:** what does each team or expert know, and what do they get asked?
+- **From the questions:** what do people actually come to this team to find out?
+
+| Domain | One-line description | Found via | In scope? |
+|--------|---------------------|-----------|-----------|
+| | | | |
 
 ### A2 — For each in-scope domain, what subdomains does it break into?
-Only go one level down. If a subdomain feels like it could stand alone as a domain,
-say so.
+Only one level down. Subdomains share the domain's glossary, scope card, and trust map —
+if a candidate subdomain would need its own, revisit A5.
 
 | Domain | Subdomains |
 |--------|-----------|
@@ -67,6 +102,46 @@ for everything, say so; if a domain has no available authority, flag it now.
 
 | Domain | Authority | Availability |
 |--------|-----------|--------------|
+
+### A5 — Apply the test to every candidate split you argued about.
+For each area where you debated one domain versus several, record the decision and the
+reason. This is the record that stops the argument being reopened every month.
+
+| Candidate split | Shared glossary? | Shared scope card? | Shared trust map? | Decision | Why |
+|-----------------|-----------------|-------------------|------------------|----------|-----|
+
+### A6 — Classify the dependencies between domains as hard or soft.
+This distinction controls sequencing, and getting it wrong is expensive in both
+directions — too many hard edges and nothing can start, too few and shallow notes get
+written before the foundations that should have shaped them.
+
+- **Hard (prerequisite):** the dependent domain cannot be understood without it. Creates
+  a real ordering constraint — the prerequisite is ingested first.
+- **Soft (enriching):** the dependent domain can be known well without it, but it adds
+  depth. **Creates no ordering constraint.** The connection is made by links between
+  concepts, and joint querying surfaces it whenever both are present.
+
+| Domain A | Domain B | A is prerequisite / enriching for B | Evidence |
+|----------|----------|-------------------------------------|----------|
+
+> Only hard edges go into the sequencing plan in Part H. Broad, basic domains are
+> frequently *enriching* rather than prerequisite; treating them as prerequisites
+> front-loads a large amount of work that the priority domains do not actually need.
+
+### A7 — Completeness check (repeat until stable)
+Do not rely on memory to be sure the map is complete. Close the loop against the corpus:
+
+1. Route a sample of the corpus against the current domain list.
+2. Inspect everything that lands in **unassigned**.
+3. Each unassigned document is one of: junk (a filter rule), out of scope (A3), or
+   **evidence of a domain you forgot** (add it and repeat).
+
+| Iteration | Date | Unassigned share | Domains added | Notes |
+|-----------|------|-----------------|---------------|-------|
+
+> Adding a domain later is cheap — a scope card, a glossary, and a re-run of a
+> deterministic routing pass. The map has to be good enough to start the pilot, not
+> perfect before it.
 
 ---
 
