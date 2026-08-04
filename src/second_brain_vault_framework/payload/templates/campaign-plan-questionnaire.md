@@ -68,6 +68,49 @@ Three corollaries that resolve most arguments:
    the same domain, and the same domain may be known at different depths by different
    audiences. Depth is recorded per note as a knowledge level, never as a separate
    domain — otherwise the same concept exists twice.
+4. **If comparing two things is a primary use case, they belong in one namespace.**
+   Comparison across domains is a join; comparison inside a domain is a lookup. Never
+   split apart the very things the team exists to compare.
+
+### Subject domains versus system domains
+
+Most corpora contain two different kinds of knowledge, and separating them is usually
+the highest-value cut available:
+
+- **Subject domains** describe external reality — the things being studied. Test:
+  *would this still be true if we replaced our own systems tomorrow?* If yes, it is
+  subject knowledge.
+- **System domains** describe the organization's own machinery — collection, processing,
+  storage, tooling, outputs. Test: *would this fact change if we rebuilt our stack?* If
+  yes, it is system knowledge.
+
+**Do not mirror one into the other.** It is common to find that the system's structure
+echoes the subject's structure (a processing path per subject family, a tool per subject
+area). Resist creating a shadow domain per subject inside the system half: the shadows
+duplicate the subject vocabulary and then drift out of step with it. Keep **one** system
+domain per lifecycle stage, and have its notes **link** to the subject concepts they
+handle. The insight that "understanding our processing deepens understanding of the
+subject" is real, and it is delivered by those links and by joint querying — not by
+parallel hierarchies.
+
+### Cross-cutting domains: split the core from the body
+
+Some domains touch everything (collection sources, device or platform knowledge,
+shared infrastructure). Treating such a domain as a prerequisite for every other domain
+front-loads an enormous amount of work; treating it as purely enriching lets avoidable
+misreadings through. Split it instead:
+
+- a **small prerequisite core** — the minimum without which other domains' documents
+  would be misread (typically 5–15% of the domain), ingested early
+- the **enriching body** — the rest, ingested on its own schedule, connected by links
+
+### Foundations domain
+
+If several domains share genuinely common concepts that none of them owns naturally,
+create one small **foundations** domain for them. Keep it disciplined with a
+promotion-only rule: a concept moves to foundations when **two or more domains need it
+and neither is its natural home** — never by default. Started otherwise, it becomes a
+dumping ground.
 
 ### A1 — What domains does the vault need to cover?
 Build this list from **several independent angles**, not one pass — the point is to catch
