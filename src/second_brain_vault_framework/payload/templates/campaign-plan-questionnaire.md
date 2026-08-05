@@ -104,13 +104,32 @@ misreadings through. Split it instead:
   would be misread (typically 5–15% of the domain), ingested early
 - the **enriching body** — the rest, ingested on its own schedule, connected by links
 
-### Foundations domain
+### Foundation domains and shared cores
 
-If several domains share genuinely common concepts that none of them owns naturally,
-create one small **foundations** domain for them. Keep it disciplined with a
-promotion-only rule: a concept moves to foundations when **two or more domains need it
-and neither is its natural home** — never by default. Started otherwise, it becomes a
-dumping ground.
+Two different things get called "shared knowledge", and they need opposite treatment.
+
+**A foundation domain** is a substantial, coherent body of lower-level knowledge that
+other domains are built on top of — a physical or transport layer, a base science, a
+regulatory framework. It has its own vocabulary and its own authority, and it usually
+holds the corpus's most authoritative and most stable documents (standards,
+specifications, textbooks). It is a full domain in its own right, ingested before the
+domains that depend on it, and it is a **hard** prerequisite — though the core/body
+split above still applies, so only its core blocks other work.
+
+**Specializations of a foundation layer belong to the layer, not to the consumer that
+uses them.** A sophisticated mechanism built on the base layer and used by only one
+consumer is still layer knowledge. Test: does the document read like a layer document
+that assumes fluency in the layer, or like a consumer document that happens to mention
+it? Put it where its vocabulary lives and link to it from the consumer — otherwise, when
+a second consumer adopts something similar, the two cannot be compared without a
+cross-domain join.
+
+**A shared core** is different: the small set of orphan concepts that several domains
+use and none owns naturally. Keep it disciplined with a promotion-only rule — a concept
+moves there when **two or more domains need it and neither is its natural home**, never
+by default. Started otherwise it becomes a dumping ground. If a candidate shared core
+starts growing into a coherent body with its own vocabulary, it was a foundation domain
+all along; promote it.
 
 ### A1 — What domains does the vault need to cover?
 Build this list from **several independent angles**, not one pass — the point is to catch
@@ -359,6 +378,33 @@ Pick one that is valuable enough to prove the system and small enough to finish.
 > *Why: this becomes the translation policy and the first glossary. Getting it wrong
 > means re-translating the corpus later.*
 
+### Glossary layers
+
+Most organizations share a large vocabulary across nearly all their knowledge, with
+smaller term sets specific to each domain and a few cases where one subdomain renames a
+shared concept. Record every term at the **most general layer at which it is true**:
+
+| Layer | Holds | Resolution |
+|-------|-------|-----------|
+| Organization | Terms used across most domains | Base layer |
+| Domain | Terms specific to one domain, plus deliberate overrides | Overrides organization |
+| Subdomain | Only where a subdomain genuinely renames a shared concept | Overrides domain |
+
+Lookup walks from the most specific layer outward, so the narrowest definition wins.
+**An override is always explicit and always carries a reason.** A domain silently
+rendering a shared term differently from the organization glossary is exactly the
+failure this layering exists to prevent, and the pipeline flags it rather than
+accepting it.
+
+### I0 — Which terms are organization-wide, and which belong to one domain?
+A term's spread across domains is the first evidence of its layer: a term appearing
+throughout the corpus is organizational, one concentrated in a single domain belongs to
+that domain. The extraction pass proposes a layer for each term; this question captures
+what you already know before that runs.
+
+| Term | Proposed layer | Notes |
+|------|---------------|-------|
+
 ### I1 — Which terms must stay in the source language?
 Terms where translating would lose meaning or break searchability: product names,
 internal project names, standard identifiers, part numbers.
@@ -370,8 +416,24 @@ internal project names, standard identifiers, part numbers.
 The start of the glossary. Add as many as you can now — every term answered here is a
 question the pipeline will not have to ask later.
 
-| Source term | English | Notes |
-|-------------|---------|-------|
+| Source term | English | Layer | Notes |
+|-------------|---------|-------|-------|
+
+### I2b — Which terms come from outside the organization?
+Standards bodies, vendors, academic literature. These already have canonical English
+forms that must be used rather than re-derived — a source-language document that
+originally translated an English standard term must round-trip back to the *same*
+English word, not a synonym. Cite where the canonical form comes from.
+
+| Source term | Canonical English | Where it comes from |
+|-------------|------------------|--------------------|
+
+### I2c — Where does a specific domain or subdomain use a shared term differently?
+Every deliberate override, with its reason. Anything not listed here is treated as an
+accident and flagged.
+
+| Term | Layer that overrides | Rendering there | Why it differs |
+|------|---------------------|-----------------|----------------|
 
 ### I3 — How should acronyms be handled?
 Expanded on first use, kept as-is, translated? Are there acronyms that collide with
