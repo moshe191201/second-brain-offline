@@ -1,9 +1,9 @@
-# Step 03 — Filtering
+# Step 02 — Filtering
 
 **Covers:** Parts C, D
-**Needs first:** [`../domains.md`](../domains.md), the out-of-scope list from
-[`01-domains/A3`](../01-domains/QUESTIONS.md), and [`../sources.md`](../sources.md) for
-path-based rules
+**Needs first:** [`../domains.md`](../domains.md) and the out-of-scope list from
+[`01-assess/A3`](../01-assess/QUESTIONS.md). `../sources.md` (step 04) enables
+path-based rules but is not required to start — Part D needs neither.
 **Produces:** scope cards (read by the filter's judge), deterministic filter seed rules,
 the protect list
 
@@ -61,7 +61,7 @@ An explicit protect list. Filters check it before anything else.
 
 ---
 
-## Sign-off — Step 03
+## Sign-off — Step 02
 
 | Field | Value |
 |-------|-------|

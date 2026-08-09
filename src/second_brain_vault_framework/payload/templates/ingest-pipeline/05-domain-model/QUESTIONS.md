@@ -1,58 +1,22 @@
-# Step 01 — Domains
+# Step 05 — Domain model
 
-**Covers:** Parts A, F, G, H
-**Read first:** [`GUIDANCE.md`](GUIDANCE.md) — the rules for deciding what is a domain
-**Needs first:** nothing, except **H1, which reads [`../sources.md`](../sources.md)** —
-fill that (via `02-classification/B1`) before answering Part H
-**Produces:** [`../domains.md`](../domains.md), plus the dependency graph, knowledge layer
-ordering, and work sequence held in this file
+**Covers:** A6, A7, F, G, H
+**Read first:** [`../01-assess/GUIDANCE.md`](../01-assess/GUIDANCE.md) — the same rules,
+now applied in detail
+**Needs first:** [`../domains.md`](../domains.md) from step 01, plus a filtered and
+translated corpus — `A7` routes real documents, and `F` needs to see what the sources
+actually contain
+**Produces:** refined `../domains.md`, the dependency graph, layer ordering, and the
+work sequence
+
+Step 01 answered *what domains and subdomains exist*. This step answers *how they depend
+on each other and in what order they get built* — which is far easier now that the corpus
+has been filtered, translated, and typed, and which is what `A7` needs in order to check
+the map against real documents.
 
 ---
 
-## Part A — Domains
-
-> *Why: the domain is the top-level partition of the vault. Domains are learned
-> separately but queried together, so the boundaries decide what gets built when.*
-
-### A1 — What domains does the vault need to cover?
-Build this list from **several independent angles**, not one pass — the point is to catch
-what a single top-down attempt forgets. Work through each angle, then merge:
-
-- **From the business:** what does this campaign do, what are its outputs and missions?
-- **From the corpus:** what do the source folders, space trees, and recurring title terms
-  cluster into? Include clusters that match no domain you had thought of.
-- **From the people:** what does each team or expert know, and what do they get asked?
-- **From the questions:** what do people actually come to this team to find out?
-
-**Record the result in [`../domains.md`](../domains.md)** — the single copy every other
-step reads. Do not restate the list here.
-
-### A2 — For each in-scope domain, what subdomains does it break into?
-Only one level down. Subdomains share the domain's glossary, scope card, and trust map —
-if a candidate subdomain would need its own, revisit A5.
-
-| Domain | Subdomains |
-|--------|-----------|
-| | |
-
-### A3 — Which domains are explicitly out of scope, and why?
-Name them. Out-of-scope domains that appear in the corpus are the hardest filtering
-case — well-formed documents about the wrong subject — so the filter needs to know
-what they look like.
-
-### A4 — Who is the authority for each in-scope domain?
-The person who adjudicates when the pipeline asks a question. If it is the same person
-for everything, say so; if a domain has no available authority, flag it now.
-
-| Domain | Authority | Availability |
-|--------|-----------|--------------|
-
-### A5 — Apply the test to every candidate split you argued about.
-For each area where you debated one domain versus several, record the decision and the
-reason. This is the record that stops the argument being reopened every month.
-
-| Candidate split | Shared glossary? | Shared scope card? | Shared trust map? | Decision | Why |
-|-----------------|-----------------|-------------------|------------------|----------|-----|
+## Part A — Dependencies and completeness
 
 ### A6 — Classify the dependencies between domains as hard or soft.
 This distinction controls sequencing, and getting it wrong is expensive in both
@@ -79,6 +43,8 @@ Do not rely on memory to be sure the map is complete. Close the loop against the
 2. Inspect everything that lands in **unassigned**.
 3. Each unassigned document is one of: junk (a filter rule), out of scope (A3), or
    **evidence of a domain you forgot** (add it and repeat).
+
+Update [`../domains.md`](../domains.md) with anything found, and record the iteration:
 
 | Iteration | Date | Unassigned share | Domains added | Notes |
 |-----------|------|-----------------|---------------|-------|
@@ -157,7 +123,7 @@ Pick one that is valuable enough to prove the system and small enough to finish.
 
 ---
 
-## Sign-off — Step 01
+## Sign-off — Step 05
 
 | Field | Value |
 |-------|-------|

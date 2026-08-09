@@ -8,6 +8,12 @@ The planning is split into steps so that no single file has to be read — by a 
 by a model — in order to work on one subject. Each step is a folder holding the questions
 for that subject, the guidance needed to answer them, and its own sign-off.
 
+**The steps follow the pipeline, not the dependency graph.** Assess first, then the
+stages in the order documents move through them, then the domain model, then success
+criteria. This ordering exists because much of the domain model is *discovered* from the
+corpus rather than known up front — and the corpus cannot be read until it has been
+filtered and translated.
+
 ---
 
 ## How to use this
@@ -22,7 +28,7 @@ free-text questions take a paragraph. "I don't know yet" is a valid answer — m
 
 **Question IDs (A1, B2, …) are stable and are not renumbered when steps move.** Later
 documents, decisions, filter rules, and open tasks cite them. Reference a question by
-step and ID — `03-filtering/C3` — so the reference says where to look without changing
+step and ID — `02-filtering/C3` — so the reference says where to look without changing
 what it points at.
 
 **`GUIDANCE.md` is read once, by a person.** It holds the reasoning needed to make hard
@@ -41,10 +47,10 @@ is a defect in the stage, not a reason to shorten the questions.
 Two outputs are needed by nearly every step, so they live at this level rather than
 inside the step that produces them:
 
-| File | Produced by | Read by |
-|------|------------|---------|
-| [`domains.md`](domains.md) | `01-domains/A1` | 02, 03, 04, 05 |
-| [`sources.md`](sources.md) | `02-classification/B1` | `01-domains/H1`, 03 |
+| File | Produced by | Refined by | Read by |
+|------|------------|-----------|---------|
+| [`domains.md`](domains.md) | `01-assess/A1`, `A2` | `05-domain-model/A7` | 02, 03, 04, 05, 06 |
+| [`sources.md`](sources.md) | `04-classification/B1` | — | `05-domain-model/H1`, 02 |
 
 > **One copy only.** Never restate either list inside a step file. A second copy drifts
 > the moment the completeness loop in `A7` adds a domain, and then two steps are scoped
@@ -56,18 +62,30 @@ inside the step that produces them:
 
 | # | Step | Covers | Needs first | Produces | Status |
 |---|------|--------|-------------|----------|--------|
-| 01 | [Domains](01-domains/QUESTIONS.md) | A, F, G, H | `sources.md` for H | `domains.md`, dependency graph, layer ordering, work sequence | |
-| 02 | [Classification](02-classification/QUESTIONS.md) | B, E | `domains.md` | `sources.md`, trust tier map, document type vocabulary | |
-| 03 | [Filtering](03-filtering/QUESTIONS.md) | C, D | `domains.md`, `sources.md` | Scope cards, filter seed rules, protect list | |
-| 04 | [Translation](04-translation/QUESTIONS.md) | I | `domains.md` | Translation policy, layered glossary seed | |
-| 05 | [Success criteria](05-success-criteria/QUESTIONS.md) | J, K | `domains.md`, E1, H3 | Gold sample, reference set, acceptance tests, definition of done | |
-
-**Fill order.** Start at 01 and work down. One exception: **`B1` in step 02 produces
-`sources.md`, which step 01's Part H reads.** B1 is a short factual inventory with no
-prerequisites, so fill it up front and return to the rest of step 02 later.
+| 01 | [Assess](01-assess/QUESTIONS.md) | A1–A5 | — | `domains.md` (domains + subdomains), out-of-scope list, authority map | |
+| 02 | [Filtering](02-filtering/QUESTIONS.md) | C, D | `domains.md`, A3 | Scope cards, filter seed rules, protect list | |
+| 03 | [Translation](03-translation/QUESTIONS.md) | I | `domains.md` | Translation policy, layered glossary seed | |
+| 04 | [Classification](04-classification/QUESTIONS.md) | B, E | `domains.md` | `sources.md`, trust tier map, document type vocabulary | |
+| 05 | [Domain model](05-domain-model/QUESTIONS.md) | A6, A7, F, G, H | `domains.md`, `sources.md`, a processed corpus | Dependency graph, layer ordering, work sequence | |
+| 06 | [Success criteria](06-success-criteria/QUESTIONS.md) | J, K | `domains.md`, E1, H3 | Gold sample, reference set, acceptance tests, definition of done | |
 
 Steps sign off independently. Filtering can be signed off and running while translation
 is still open — that is the point of the split.
+
+### Two passes, not one line
+
+Some questions are answerable immediately; others need a corpus you can actually read.
+Do not stall on the second group in week one, and do not invent a provisional domain map
+just to fill them in.
+
+| | Answerable from the start | Second pass — needs a processed corpus |
+|---|---|---|
+| Assess | A1, A2, A3, A4, A5 | A1/A2's corpus angle → refined by `A7` |
+| Filtering | D1–D4 (junk, defects, duplication, protect list) | C1–C4 (scope is defined per domain) |
+| Translation | I1, I2b, I3, I5, and I2's organization-layer rows | I0, I2c, I2's domain-layer rows |
+| Classification | B1–B3, E1–E3 | B4 |
+| Domain model | — | all of it |
+| Success criteria | — | all of it |
 
 ---
 
@@ -75,13 +93,14 @@ is still open — that is the point of the split.
 
 | Output | Built from | Used by |
 |--------|-----------|---------|
-| Domain list | A1 → `domains.md` | Every stage |
+| Domain and subdomain map | A1, A2 → `domains.md` | Every stage |
 | Source inventory | B1 → `sources.md` | Work-unit definition, filtering |
 | Scope cards | A3, C | Filtering (scope judge), classification |
 | Filter seed rules | D | Filtering (deterministic gates) |
 | Trust tier map | B2–B4 | Conflict resolution, ingest order |
 | Document type vocabulary | E | Classification |
 | Knowledge layer ordering | F | Ingest order within a work unit |
+| Contested-split record | A5 | Stops settled arguments being reopened |
 | Dependency graph and sequence | A6, G, H | Work sequencing, overlap ownership |
 | Translation policy and glossary seed | I | Translation |
 | Pilot selection | J | Calibration (gold sample, reference translations) |

@@ -1,9 +1,9 @@
-# Step 05 — Success criteria
+# Step 06 — Success criteria
 
 **Covers:** Parts J, K
 **Needs first:** [`../domains.md`](../domains.md), the document types from
-[`02-classification/E1`](../02-classification/QUESTIONS.md) (J1 samples across genres),
-and the pilot choice from [`01-domains/H3`](../01-domains/QUESTIONS.md)
+[`04-classification/E1`](../04-classification/QUESTIONS.md) (J1 samples across genres),
+and the pilot choice from [`05-domain-model/H3`](../05-domain-model/QUESTIONS.md)
 **Produces:** gold sample, reference translation set, acceptance tests, definition of done
 
 This step is filled last, but it is not paperwork: J2's labelled sample is what tunes
@@ -52,7 +52,7 @@ The failure you would most want to catch early.
 
 ---
 
-## Sign-off — Step 05
+## Sign-off — Step 06
 
 | Field | Value |
 |-------|-------|

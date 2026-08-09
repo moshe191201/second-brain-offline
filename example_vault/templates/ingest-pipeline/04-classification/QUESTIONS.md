@@ -1,12 +1,12 @@
-# Step 02 — Classification
+# Step 04 — Classification
 
 **Covers:** Parts B, E
 **Needs first:** [`../domains.md`](../domains.md)
 **Produces:** [`../sources.md`](../sources.md), plus the trust tier map and document type
 vocabulary held in this file
 
-> **Fill B1 before starting step 01's Part H** — work-unit definitions read
-> `../sources.md`. B1 is a short factual inventory with no prerequisites of its own.
+> **B1 has no prerequisites** — it is a factual inventory and can be filled at any
+> time. Step 05's Part H reads `../sources.md`, so it must exist before sequencing.
 
 Classification assigns two things to every document: **what kind of document it is**
 (Part E) and **how much it is trusted** (Part B). Trust comes from where a document came
@@ -68,7 +68,7 @@ findings section is durable.
 
 ---
 
-## Sign-off — Step 02
+## Sign-off — Step 04
 
 | Field | Value |
 |-------|-------|

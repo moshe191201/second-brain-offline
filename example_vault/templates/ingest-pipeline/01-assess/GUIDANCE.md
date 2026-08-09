@@ -1,4 +1,7 @@
-# Step 01 — Domains: guidance
+# Domain model — guidance
+
+Used by step 01 (the initial domain list) and step 05 (subdomains, dependencies,
+layering). One copy, linked from both.
 
 Read once before filling in `QUESTIONS.md`. This file is reference material for people
 making hard calls; it is not needed while answering, and should not be loaded as context

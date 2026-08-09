@@ -1,4 +1,4 @@
-# Step 04 — Translation
+# Step 03 — Translation
 
 **Covers:** Part I
 **Read first:** [`GUIDANCE.md`](GUIDANCE.md) — how glossary layers resolve
@@ -63,7 +63,7 @@ things. Name the canonical form.
 
 ---
 
-## Sign-off — Step 04
+## Sign-off — Step 03
 
 | Field | Value |
 |-------|-------|

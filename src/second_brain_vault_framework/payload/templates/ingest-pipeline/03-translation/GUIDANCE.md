@@ -1,4 +1,4 @@
-# Step 04 — Translation: guidance
+# Step 03 — Translation: guidance
 
 Read once before filling in `QUESTIONS.md`. This file is reference material for people
 making hard calls; it is not needed while answering, and should not be loaded as context
