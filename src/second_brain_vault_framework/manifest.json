@@ -8,7 +8,15 @@
     ".claude/skills/vault-query/SKILL.md",
     ".claude/skills/vault-lint/SKILL.md",
     "scripts/vault.py",
-    "scripts/check_vault_answer.py"
+    "scripts/check_vault_answer.py",
+    "templates/campaign-plan/README.md",
+    "templates/campaign-plan/01-domains/GUIDANCE.md",
+    "templates/campaign-plan/01-domains/QUESTIONS.md",
+    "templates/campaign-plan/02-classification/QUESTIONS.md",
+    "templates/campaign-plan/03-filtering/QUESTIONS.md",
+    "templates/campaign-plan/04-translation/GUIDANCE.md",
+    "templates/campaign-plan/04-translation/QUESTIONS.md",
+    "templates/campaign-plan/05-success-criteria/QUESTIONS.md"
   ],
   "scaffold_only_paths": [
     "tests/VAULT_TESTS.md"
