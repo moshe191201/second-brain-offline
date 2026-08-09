@@ -51,7 +51,16 @@ Mirrors the `filters.py` registry deliberately, so detectors are portable into t
 stage-4 evidence lane rather than rewritten there.
 
 ```python
-Route = Literal["repair", "reconvert", "resplit", "route", "none"]
+Route = Literal["repair", "reconvert", "resplit", "reroute", "none"]
+
+@dataclass(frozen=True)
+class CensusDoc:
+    doc_id: str
+    title: str
+    raw_bytes: bytes          # authoritative; some files are not decodable text at all
+    text: str | None          # None when raw_bytes fail to decode
+    source_path: str
+    sibling_paths: frozenset[str]   # inventory snapshot, for reference resolution
 
 @dataclass(frozen=True)
 class DefectFinding:
@@ -71,6 +80,16 @@ Rules the contract enforces, carried over verbatim from the filter contract:
 - **Detectors are pure.** No I/O, no network. The runner handles persistence.
 - **Version integers.** Changing logic or a threshold bumps `version`; census rows store
   `detector_id@version` so stale rows recompute on the next run.
+
+`CensusDoc` diverges from the filter contract's `Doc` in two ways that the corpus forces:
+
+- **`raw_bytes` is authoritative and `text` is nullable.** Family 3 exists precisely
+  because some `.md` files are not text, so a contract that only offers a decoded `str`
+  cannot express its own inputs. Detectors that need text must handle `None`.
+- **`sibling_paths` is passed in, not looked up.** `image_broken_ref` has to know whether
+  a referenced file exists, which would otherwise mean filesystem access inside a
+  detector and break purity. The runner takes one inventory snapshot up front and hands
+  it down.
 
 `route` replaces the filter contract's `lane` because these detectors answer a different
 question. A filter decides keep/reject. A detector decides *which repair path applies* —
@@ -121,14 +140,14 @@ tables from being read as damage; these detectors must not double-count it.
 
 | ID | Signal | Route |
 |----|--------|-------|
-| `binary_magic_bytes` | Leading magic: `Rar!\x1a\x07`, `PK\x03\x04`, `RIFF…WAVE`, `%PDF-`, `\x89PNG`, `\xff\xd8\xff`, `\x1f\x8b`, `OggS`, `7z\xbc\xaf\x27\x1c` | `route` |
-| `binary_byte_ratio` | NUL bytes present; share of bytes outside printable + whitespace | `route` |
+| `binary_magic_bytes` | Leading magic: `Rar!\x1a\x07`, `PK\x03\x04`, `RIFF…WAVE`, `%PDF-`, `\x89PNG`, `\xff\xd8\xff`, `\x1f\x8b`, `OggS`, `7z\xbc\xaf\x27\x1c` | `reroute` |
+| `binary_byte_ratio` | NUL bytes present; share of bytes outside printable + whitespace | `reroute` |
 
 **These are a salvage opportunity, not junk.** `PK\x03\x04` is also the magic for every
 OOXML format, so a `.md` that is secretly a ZIP may be a recoverable `.docx`, `.pptx`, or
 `.xlsx`. The detector inspects for `[Content_Types].xml` inside the archive and records
 the distinction: recoverable office document → the router's input queue; genuine archive
-or media → quarantine with its detected type recorded. Route, never silently reject.
+or media → quarantine with its detected type recorded. Reroute, never silently reject.
 
 ### Family 4 — Base64 payloads
 
