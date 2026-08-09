@@ -1,11 +1,12 @@
 # Step 02 — Classification
 
 **Covers:** Parts B, E
-**Needs first:** the domain list from [`01-domains/A1`](../01-domains/QUESTIONS.md)
-**Produces:** source inventory, trust tier map, document type vocabulary
+**Needs first:** [`../domains.md`](../domains.md)
+**Produces:** [`../sources.md`](../sources.md), plus the trust tier map and document type
+vocabulary held in this file
 
-> **Answer B1 before starting step 01's Part H** — the work-unit definitions depend on
-> knowing what sources exist. B1 is a short factual inventory with no prerequisites.
+> **Fill B1 before starting step 01's Part H** — work-unit definitions read
+> `../sources.md`. B1 is a short factual inventory with no prerequisites of its own.
 
 Classification assigns two things to every document: **what kind of document it is**
 (Part E) and **how much it is trusted** (Part B). Trust comes from where a document came
@@ -22,8 +23,8 @@ from, not from a model's opinion of it, which is why the source map lives here.
 One row per source: a Confluence space, a file-share directory tree, a mailbox export,
 a document library.
 
-| Source | What it is | Rough volume | Owner |
-|--------|-----------|--------------|-------|
+**Record the result in [`../sources.md`](../sources.md)** — the single copy step 01 and
+step 03 read. Do not restate the inventory here.
 
 ### B2 — Assign each source category a trust tier.
 Starter ladder — adapt the labels, keep the ordering meaningful:

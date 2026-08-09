@@ -2,9 +2,10 @@
 
 **Covers:** Parts A, F, G, H
 **Read first:** [`GUIDANCE.md`](GUIDANCE.md) — the rules for deciding what is a domain
-**Needs first:** nothing, except **H1, which needs the source inventory from
-[`02-classification/B1`](../02-classification/QUESTIONS.md)** — answer B1 up front
-**Produces:** domain list, dependency graph, knowledge layer ordering, work sequence
+**Needs first:** nothing, except **H1, which reads [`../sources.md`](../sources.md)** —
+fill that (via `02-classification/B1`) before answering Part H
+**Produces:** [`../domains.md`](../domains.md), plus the dependency graph, knowledge layer
+ordering, and work sequence held in this file
 
 ---
 
@@ -23,9 +24,8 @@ what a single top-down attempt forgets. Work through each angle, then merge:
 - **From the people:** what does each team or expert know, and what do they get asked?
 - **From the questions:** what do people actually come to this team to find out?
 
-| Domain | One-line description | Found via | In scope? |
-|--------|---------------------|-----------|-----------|
-| | | | |
+**Record the result in [`../domains.md`](../domains.md)** — the single copy every other
+step reads. Do not restate the list here.
 
 ### A2 — For each in-scope domain, what subdomains does it break into?
 Only one level down. Subdomains share the domain's glossary, scope card, and trust map —
@@ -140,8 +140,8 @@ to know so it doesn't merge them.
 > checked together. Their order is the project plan.*
 
 ### H1 — Define the work units.
-A work unit is usually one domain, sometimes one source, sometimes a slice of both.
-**Requires the source inventory from [`02-classification/B1`](../02-classification/QUESTIONS.md).**
+A work unit is usually one domain, sometimes one source, sometimes a slice of both — so
+this reads both [`../domains.md`](../domains.md) and [`../sources.md`](../sources.md).
 
 | Work unit | Definition (which documents) | Rough volume | Depends on |
 |-----------|------------------------------|--------------|-----------|

@@ -2,8 +2,7 @@
 
 **Covers:** Part I
 **Read first:** [`GUIDANCE.md`](GUIDANCE.md) — how glossary layers resolve
-**Needs first:** the domain list from [`01-domains/A1`](../01-domains/QUESTIONS.md), since
-every term is placed at a layer
+**Needs first:** [`../domains.md`](../domains.md), since every term is placed at a layer
 **Produces:** translation policy, layered glossary seed
 
 ---

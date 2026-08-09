@@ -1,8 +1,9 @@
 # Step 03 — Filtering
 
 **Covers:** Parts C, D
-**Needs first:** the domain list and out-of-scope list from
-[`01-domains/A1`, `A3`](../01-domains/QUESTIONS.md)
+**Needs first:** [`../domains.md`](../domains.md), the out-of-scope list from
+[`01-domains/A3`](../01-domains/QUESTIONS.md), and [`../sources.md`](../sources.md) for
+path-based rules
 **Produces:** scope cards (read by the filter's judge), deterministic filter seed rules,
 the protect list
 
