@@ -1,11 +1,16 @@
 # Conversion Defect Census + Reconversion Router — Design
 
 **Date:** 2026-08-09
-**Status:** Part 1 (census) approved for planning. Part 2 (router) designed, planned after
+**Status:** Part 1 (census) approved for planning. Parts 2–3 designed, planned after
 Part 1 lands.
-**Scope:** Recovering the damaged portion of `raw_md/`. Two deliverables, strictly
-sequenced: a read-only **defect census** that measures what is actually wrong, then a
-**reconversion router** that acts only on what the census says is fixable by reconverting.
+**Scope:** Recovering the damaged portion of `raw_md/`. Three parts, strictly sequenced:
+a read-only **defect census** that measures what is actually wrong, the **actions** that
+consume it, and a **reconversion router** for the subset the census says reconversion can
+fix.
+
+**Standing autonomy rule (client decision, 2026-08-09):** nothing runs automatically
+except repair, and every automatic action is reviewed before it is trusted to run
+unattended. No action promotes itself.
 
 ## What this revises
 
@@ -34,7 +39,9 @@ census detectors are where they land.
 
 ## Non-goals
 
-- **No repair in the census.** It measures and routes. Every write is a later stage.
+- **No repair in the census.** It measures and routes. Every write belongs to Part 2.
+  The census has no `--apply` flag and no write path at all; this is a property of the
+  code, not a habit of the operator.
 - **No relevance judgement.** Whether a document *belongs* is stage 4's job. This is
   purely "is this file damaged, and by what."
 - **No re-splitting.** Detector family 6 reports whether the split is broken; fixing the
@@ -235,7 +242,173 @@ the documentation cannot drift — the same guard the filter catalog uses.
 
 ---
 
-# Part 2 — Reconversion router
+# Part 2 — Actions
+
+Every route in the catalog names an action. This part specifies what each one actually
+does, what it must not touch, how it is verified, and how much autonomy it has.
+
+## Autonomy levels
+
+| Level | Meaning | Who is here now |
+|-------|---------|-----------------|
+| `propose` | Computes the change, writes it to a worklist, executes nothing. | `reconvert`, `resplit`, `reroute` |
+| `review` | Executes, and queues every applied change for human review. Reversible by construction. | `repair` |
+| `auto` | Executes, sampled audit only. | **Nothing.** Reachable only by promotion. |
+
+Two rules govern the table:
+
+1. **`propose` is the default, and the runner requires `--apply` to leave it.** A run
+   with no flags can only ever produce a worklist.
+2. **Promotion is a human act, and is never itself automatic.** A detector becomes
+   eligible for `auto` after N consecutive reviewed applications with zero rejections,
+   but eligibility is not promotion — someone records the decision, with the evidence,
+   in `ACTIONS.md`. Any rejection resets the counter to zero.
+
+## Why automatic repair is safe here
+
+Repair runs at `review` rather than `propose`, and that is only defensible because of a
+convention already standing in the pipeline: **stages never mutate inputs.** A repair does
+not edit a file. It writes a new artifact into the content-addressed store and moves a
+ledger pointer, recording `repaired_from=<hash>` and the `detector_id@version` responsible.
+
+The original bytes are still in the store, unchanged, forever. So "automatic" here means
+*a new candidate was produced and the pointer moved* — not *your data was overwritten*.
+Reverting is a pointer change, and reverting a whole batch is reverting one commit. If
+that convention is ever broken, repair must drop back to `propose`.
+
+## The actions
+
+### `repair` / `rtl_char_reversed` — reverse the run back
+
+**Operates on:** each maximal run of Hebrew letters (plus intra-word niqqud, geresh, and
+gershayim) that the detector flagged. Character order within the run is reversed.
+
+**Must not touch:** runs the detector did not flag; embedded Latin words and digit
+sequences, which were never reversed and would be destroyed by reversing them; and all
+markdown structure — link targets, table pipes, HTML comments, frontmatter, and the
+interior of fenced code blocks, which are skipped wholesale.
+
+**Verification, and the reason this one can be trusted:** the repair is self-checking.
+Re-run the detector on the output; the final-form invariant that identified the damage
+must no longer fire. If it still fires, the repair did not work — the file is re-routed
+to `reconvert` rather than left in a half-fixed state. Very few repairs get an objective
+success test; this one does, because the invariant is a property of the language rather
+than a guess about the content.
+
+**Records:** runs repaired, runs skipped, and the post-repair detector result.
+
+### `repair` / `rtl_order_reversed` — reverse the word sequence
+
+**Operates on:** the word sequence within a flagged line or segment.
+
+**Must not touch:** anything outside the flagged segment; intra-word character order,
+which is `rtl_char_reversed`'s concern and independently determined.
+
+**This one has no self-check, and that is a real asymmetry.** Word-order reversal produces
+text that looks structurally valid in either direction — there is no invariant like the
+final-form rule to verify against, so only a Hebrew reader can confirm the result reads
+correctly. It should stay at `review` well past the point where `rtl_char_reversed`
+graduates, and I would not promote it to `auto` at all without the expert explicitly
+signing off on that specific detector. Segment boundaries in mixed-direction lines are
+genuinely ambiguous, and this is where I expect the rejections to come from.
+
+### `repair` / `base64_data_uri`, `base64_bare_blob` — extract and reference
+
+**Operates on:** each detected blob. Decode it, write the bytes into the content-addressed
+store keyed by their hash, replace the inline blob with a reference to it.
+
+**Must not touch:** any blob that fails to decode, or that decodes to bytes matching no
+known image magic. Those are recorded as findings and left in place — an undecodable blob
+is a different defect, and guessing at it would destroy evidence.
+
+**Verification:** decoded bytes match a known image signature, and the rewritten document
+still parses as markdown.
+
+**Records:** blob count, bytes reclaimed, store hashes written. The payoff is downstream —
+inline blobs wreck chunking and inflate token counts through every later stage.
+
+### `propose` / `reconvert` — produce a candidate, prove it is better
+
+**Produces:** a worklist of documents whose defects reconversion could plausibly fix
+(mangled tables, dropped images), each with the source file, the proposed engine and
+settings, and the current defect counts.
+
+**When it runs (Part 3), acceptance is machine-checkable and blind overwrite is
+forbidden.** The router converts to a *candidate*, runs the census over the candidate, and
+compares against the incumbent. A candidate is accepted only if it fires strictly fewer
+detectors on the same document and introduces no detector the incumbent did not fire.
+Salvage that cannot be measured is not salvage — without this test, "reconvert and hope"
+can quietly trade a table defect for an RTL defect and call it progress.
+
+### `propose` / `resplit` — report boundary damage, change nothing
+
+**Produces:** the suspected-boundary-error list with its evidence — length outliers,
+documents opening mid-sentence, documents with no title.
+
+**Why it cannot act:** `doc_id` is `f(source path, content hash)`, so re-splitting mints
+new identities and orphans every downstream artifact keyed to the old ones. Re-splitting
+is therefore not a repair but a re-entry, and it needs a new splitter plus a migration
+story for anything already derived. Both are separate work, correctly sized only once this
+report says how much of the corpus is affected.
+
+**Read this one first.** If the split is badly broken, reconversion scheduled before
+re-splitting produces cleanly converted garbage.
+
+### `propose` / `reroute` — manifest the non-markdown, extract nothing
+
+**Produces:** a manifest of every `.md` that is not markdown — detected type from magic
+bytes, whether a ZIP is a recoverable OOXML document (contains `[Content_Types].xml`) or a
+genuine archive, and a proposed destination: the router's input queue for recoverable
+office documents, quarantine for everything else.
+
+**Why it stays at `propose` permanently:** the action here is unpacking archives of unknown
+provenance and moving files between trees. Neither should happen without someone looking
+at the manifest first, and unlike repair, neither is a pointer change that reverts cleanly.
+
+### `none` / `rtl_bidi_controls` — evidence only
+
+Recorded in the census, never acted on. Bidi control characters are diagnostic of how the
+extractor behaved; they inform the other RTL detectors and the eventual router settings,
+and stripping them would erase that signal.
+
+## The review queue
+
+Every `review`-level application and every `propose` worklist entry writes one queue row:
+`doc_id`, detector, the before and after excerpts side by side, the measures, and a
+verdict field.
+
+- **The reviewer is the domain expert**, not the operator. Every RTL verdict requires
+  reading Hebrew, so this cannot be delegated to the pipeline.
+- **Rejections are the most valuable output.** Each becomes a fixture in
+  `fixtures/`, so a rejected repair can never silently recur.
+- **The queue is sampled, not exhaustive, above a volume threshold** — sized by the
+  Phase-0 autonomy dial, consistent with the rest of the pipeline. Below the threshold,
+  everything is reviewed.
+
+`ACTIONS.md` documents one section per action: what it does, its current autonomy level,
+the promotion evidence to date, and the version history. A test asserts every action in
+the code appears there and vice versa, the same drift guard the filter and detector
+catalogs use.
+
+## Module layout
+
+```
+scripts/actions/
+  __init__.py
+  actions.py      # every action + the registry; autonomy level is declared here
+  runner.py       # --apply gate, store writes, ledger pointer moves, queue rows
+  queue.py        # review queue read/write and verdict recording
+  ACTIONS.md      # per action: what it does, autonomy level, promotion evidence, versions
+  fixtures/       # accepted and rejected cases, rejections promoted from the queue
+```
+
+Actions are separate from `scripts/census/` on purpose. The census must remain a module
+with no write path, and the cleanest way to guarantee that is for the writing code to live
+somewhere else entirely.
+
+---
+
+# Part 3 — Reconversion router
 
 Designed here so Part 1's outputs have a known consumer. Planned and built after Part 1
 lands and its numbers are read.
