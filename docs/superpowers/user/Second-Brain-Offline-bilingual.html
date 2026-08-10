@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Second Brain Offline — מצגת עברית · רשת סגורה</title>
+<style>
+  :root {--green:#4CAF50;--green-dark:#2E7D32;--green-light:#E8F5E9;--gold:#D4AF37;--gold-dark:#9C7E1A;--gold-light:#FFF8DC;--bg:#F6FAF6;--ink:#1A1E1A;--muted:#6B7A6B;--border:#E0E8E0;}
+  *{box-sizing:border-box;}html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--ink);font-family:'Heebo','Segoe UI',system-ui,sans-serif;}
+  .topbar{position:fixed;top:0;left:0;right:0;z-index:20;background:linear-gradient(90deg,var(--green-dark),var(--green));color:white;padding:10px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,0.15);}
+  .topbar .brand{display:flex;align-items:center;gap:10px;font-weight:800;}.topbar .logo{width:10px;height:10px;background:var(--gold);border-radius:50%;box-shadow:0 0 0 6px rgba(212,175,55,0.25);}
+  .topbar .nav{display:flex;align-items:center;gap:10px;}.topbar button{appearance:none;border:1px solid rgba(255,255,255,0.35);background:rgba(255,255,255,0.14);color:white;padding:6px 14px;border-radius:999px;cursor:pointer;font-weight:700;font-size:13px;}.topbar button:hover{background:rgba(255,255,255,0.22);}.topbar button:disabled{opacity:.4;cursor:default;}.topbar .counter{font-variant-numeric:tabular-nums;font-weight:700;min-width:90px;text-align:center;}.progress{position:fixed;top:48px;left:0;height:3px;background:var(--gold);z-index:20;transition:width .3s ease;}
+  #deck{margin-top:48px;height:calc(100vh - 48px);padding:0;}
+  .slide{display:none;width:100vw;height:100%;max-width:none;margin:0;border-radius:0;border:none;padding:0;flex-direction:column;justify-content:flex-start;animation:fade .25s ease;}
+  .slide.active{display:flex;}@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  .slide-inner{background:white;border:none;border-radius:0;box-shadow:none;padding:32px 64px 24px;position:relative;overflow:auto;flex:1;display:flex;flex-direction:column;justify-content:flex-start;}
+  .slide.title-slide .slide-inner{background:linear-gradient(135deg,#1B2F1B 0%,#2E7D32 55%,#3CA942 100%);color:white;border:none;text-align:center;justify-content:center;}
+  .slide.title-slide .he-title{color:var(--gold-light);border-color:rgba(255,255,255,0.3);}.slide.title-slide .he-content{color:#F0FFF0;}.slide.title-slide .he-content strong{color:var(--gold-light);}.slide.title-slide .slide-footer{color:rgba(255,255,255,0.85);border-color:rgba(255,255,255,0.2);}.slide.title-slide .slide-footer .slide-count{background:rgba(255,255,255,0.16);color:var(--gold-light);}
+  .he-title{font-size:34px;font-weight:900;line-height:1.2;margin:0 0 8px;padding-bottom:8px;border-bottom:2px solid var(--green-light);color:var(--green-dark);}
+  .he-content{width:100%;font-size:17px;line-height:1.65;} .he-content p{margin:12px 0;} .he-content strong{color:var(--green-dark);} .he-content table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;direction:rtl;} .he-content th{background:var(--green-dark);color:white;padding:9px 12px;text-align:right;} .he-content td{padding:9px 12px;border-bottom:1px solid var(--border);text-align:right;} .he-content tr:nth-child(even) td{background:rgba(76,175,80,0.04);} .he-content code{background:#F1F8F1;border:1px solid var(--border);padding:2px 7px;border-radius:6px;font-size:14px;} .he-content h1,.he-content h2,.he-content h3{color:var(--green-dark);}
+  .slide-footer{display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.06em;font-weight:700;color:var(--muted);padding:12px 6px 0;border-top:1px solid var(--border);margin-top:14px;}
+  .slide-footer .slide-count{background:var(--green-light);color:var(--green-dark);padding:4px 10px;border-radius:999px;}
+  .hint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--muted);background:rgba(255,255,255,0.9);padding:6px 12px;border-radius:999px;border:1px solid var(--border);}
+  @media(max-width:640px){.slide-inner{padding:20px 18px;}.he-title{font-size:26px;}.he-content{font-size:15px;}}
+  @media print{.topbar,.progress,.hint{display:none;}#deck{height:auto;padding-top:0;}.slide{display:flex !important;page-break-after:always;height:auto;min-height:90vh;}}
+</style>
+</head>
+<body>
+  <div class="topbar"><div class="brand"><span class="logo"></span> Second Brain Offline — עברית</div><div class="nav"><button id="prev">› הקודם</button><span class="counter" id="counter">1 / 34</span><button id="next">הבא ‹</button></div></div>
+  <div class="progress" id="progress"></div>
+  <div id="deck">
+
+    <section class="slide title-slide" data-slide="1">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">כספת ידע מבוססת AI הפועלת כולה ברשת הסגורה — ללא חיבור לאינטרנט וללא יציאה החוצה.</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>סקירת פרויקט — פיילוט פעיל.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">כספת ידע מבוססת AI הפועלת כולה ברשת הסגורה — ללא חיבור לאינטרנט וללא יציאה החוצה.</span>
+        <span class="slide-count">01 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="2">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">שני חלקים, אחד מהם אופציונלי.</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>חלק א' — 15 דקות</strong></p>
+
+<p>הבעיה, הפתרונות הקיימים, במה אנו שונים, שלושת היתרונות המובהקים וסטטוס הפיילוט. חלק עצמאי וסגור — אם נעצור כאן, התמונה המלאה הוצגה.</p>
+
+<p><strong>חלק ב' — צלילה טכנית</strong></p>
+
+<p>מחזור חיי ה-vault, תשתיות, מנועי שליפה ומסלול הכניסה ל wiki אצל הלקוח. מיועד לקהל הטכני. ניתן לדלג על כל שקף בנפרד.</p>
+
+<p>שקפי deep-dive מסומנים בפינה הימנית העליונה.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">שני חלקים, אחד מהם אופציונלי.</span>
+        <span class="slide-count">02 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="3">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">שלושה פערים חוסמים שילוב AI במרכז</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>01 הזיה — המודל אינו מכיר את התחומים שלנו.</strong> המודל שולט בידע כללי וכמעט אינו מכיר את התחומים הספציפיים שלנו — לכן כששואלים אותו הוא ממציא בביטחון רב.</p>
+
+<p><strong>02 תרגום — הוא אינו דובר את השפה שלנו.</strong> גם עם skills וסוכנים, הוא אינו יודע לתרגם את האופן שבו אנו כותבים ומדברים לסקריפטים, שאילתות ופעולות סוכן. הז'רגון, הקיצורים והתהליכים שלנו אינם מתורגמים.</p>
+
+<p><strong>03 הידע קיים — אך מנותק.</strong> אלפי עמודים של תיעוד פנימי כבר מכילים את התשובות, שנכתבו לאורך שנים. כיום אין דרך לעגן בהם את המודל.</p>
+
+<p>כל צוות הנתקל בבעיה זו נאלץ לפתח פתרון חלקי באופן עצמאי.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">שלושה פערים חוסמים שילוב AI במרכז</span>
+        <span class="slide-count">03 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="4">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">מה הפערים עולים לנו</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>המומחה הוא גם מנוע החיפוש וגם המתרגם — וכמעט אף פעם אינו יודע את התשובה בעל פה. כל שאלה מחייבת אותו לקריאה ידנית בתיעוד, ולאחר מכן לתרגום ידני לסקריפט או לשאילתא המדויקת שהשואל צריך.</p>
+
+<p><strong>60% מיום עמוס — מוקדשים לכך</strong></p>
+
+<p>מענה על שאלות שאנשים היו עונים עליהן בעצמם אילו ה-vault היה מעגן את המודל | לעומת העבודה האנליטית שרק הוא מסוגל לבצע</p>
+
+<p>תשובות רבות שהוא נותן הן תשובות שכבר נתן בעבר — ואף אחת מהן אינה מתועדת.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">מה הפערים עולים לנו</span>
+        <span class="slide-count">04 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="5">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">היכן הפערים פוגשים אותנו — וכיצד ה-vault סוגר אותם</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>היום — הזיה:</strong> שאלה → המודל מנחש מידע כללי → הזיה.</p>
+
+<p><strong>תרגום:</strong> בקשה → נוחתת אצל המומחה (שגם הוא נדרש לעיין בתיעוד ולקרוא ידנית) → הוא קורא ומתרגם ידנית לסקריפט/שאילתא. אדם אחד הוא גם האינדקס וגם המתרגם, ושניהם אינם ניתנים להרחבה.</p>
+
+<p><strong>עם ה-vault:</strong> שאלה → ה-vault משיב כשהוא מעוגן בתיעוד שלנו, בצירוף מקורות; השפה כבר ממופה לסקריפטים/שאילתות/skills → רק מה שה-vault אינו יודע מגיע למומחה — ותשובתו הופכת ל-note חדש. האינדקס והמילון נשארים, ומשתפרים באופן רציף.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">היכן הפערים פוגשים אותנו — וכיצד ה-vault סוגר אותם</span>
+        <span class="slide-count">05 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="6">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">הרעיון של קרפאת&#x27;י: במקום לבקש מהמודל לקרוא את המסמכים בכל פעם מחדש — תנו לו לקרוא אותם פעם אחת, לכתוב wiki, ומאז לענות מתוך ה-wiki.</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>מקורות</strong> — קטעי מקור בלתי ניתנים לשינוי. שכבת הראיות, אינה נערכת. קונפלואנס, תיקיות רשת, מיילים.</p>
+
+<p><strong>וויקי</strong> — רעיון אחד לכל note, מקושר בצפיפות, נכתב על ידי המודל.</p>
+
+<p><strong>סכמה</strong> — מבנה קבוע שהמודל נדרש לעמוד בו, כדי שה-wiki יישאר מסודר.</p>
+
+<p>רעיון מצוין, והוא נקודת המוצא שלנו.</p>
+
+<p>אלא שהוא תוכנן למחשב נייד מחובר לרשת, עם מודל מתקדם, ולשימוש אישי — היקף מצומצם, מסמכים באנגלית רהוטה, גרסה אחת לכל מסמך ורמת אמינות אחידה.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">הרעיון של קרפאת&#x27;י: במקום לבקש מהמודל לקרוא את המסמכים בכל פעם מחדש — תנו לו לקרוא אותם פעם אחת, לכתוב wiki, ומאז לענות מתוך ה-wiki.</span>
+        <span class="slide-count">06 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="7">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">ארבע הנחות שאינן תקפות אצלנו</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>קיים מודל מתקדם זמין</strong> → אצלנו פועל מודל קטן ברשת הסגורה, המוגבל ביכולת שיפוט פתוח.</p>
+
+<p><strong>המחשב מחובר לרשת</strong> → אצלנו כל תלות (dependency) נבנית בחוץ ומוכנסת פנימה פעם אחת.</p>
+
+<p><strong>הקורפוס קטן ובאנגלית</strong> → אצלנו אלפי עמודים בעברית עם טרמינולוגיה ייעודית שהמודל אינו מכיר — אנו מעגנים אותו באמצעות הזרקת הגדרות GT להקשר.</p>
+
+<p><strong>אדם אחד אחראי</strong> → אצלנו מדובר בנכס צוותי — נדרשים תהליכי חפיפה, שדרוג וביקורת.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">ארבע הנחות שאינן תקפות אצלנו</span>
+        <span class="slide-count">07 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="8">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">אותו רעיון, בעיה שונה לחלוטין</h2>
+        <div class="he-content" dir="rtl" lang="he"><table>
+
+<thead>
+
+<tr>
+
+<th></th>
+
+<th>LLM-WIKI</th>
+
+<th>SECOND BRAIN OFFLINE</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>סביבה</td>
+
+<td>מחשב נייד מחובר</td>
+
+<td>רשת מנותקת, ללא GPU</td>
+
+</tr>
+
+<tr>
+
+<td>מודל</td>
+
+<td>המתקדם ביותר, זמין תמיד</td>
+
+<td>מודל קטן ברשת הסגורה, מוגבל ומבוקר</td>
+
+</tr>
+
+<tr>
+
+<td>שליפה</td>
+
+<td>המודל קורא את ה-wiki</td>
+
+<td>חיפוש היברידי + גרף ידע + Obsidian</td>
+
+</tr>
+
+<tr>
+
+<td>תהליך</td>
+
+<td>שיקול דעת חופשי של המודל</td>
+
+<td>מחזור חיים מובנה, רובריקות, בדיקות fail-closed</td>
+
+</tr>
+
+<tr>
+
+<td>היקף</td>
+
+<td>רשימת קריאה אישית</td>
+
+<td>מלוא התיעוד של צוות שלם</td>
+
+</tr>
+
+<tr>
+
+<td>הפצה</td>
+
+<td>רעיון למימוש עצמי</td>
+
+<td>חבילה מוכנה להתקנה ולשדרוג</td>
+
+</tr>
+
+</tbody>
+
+</table></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">אותו רעיון, בעיה שונה לחלוטין</span>
+        <span class="slide-count">08 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="9">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">יתרונות תחרותיים — שלושה חסמים משמעותיים</h2>
+        <div class="he-content" dir="rtl" lang="he">
+<div style="display:grid; grid-template-columns: repeat(3,1fr); gap:14px; margin:10px 0 8px; direction:rtl; text-align:right;">
+  <div style="background:var(--green-light); border:1px solid var(--border); border-top:3px solid var(--green); border-radius:12px; padding:14px 14px; text-align:center;">
+    <div style="font-size:11px; color:var(--muted); font-weight:800; letter-spacing:.08em;">I</div>
+    <div style="font-weight:900; font-size:15px; color:var(--green-dark); margin:4px 0;">רץ ברשת הסגורה</div>
+    <div style="font-size:12px; color:var(--muted); line-height:1.3;">כל תלות ארוזה<br>מעבר אחד לגרסה</div>
+  </div>
+  <div style="background:var(--green-light); border:1px solid var(--border); border-top:3px solid var(--green); border-radius:12px; padding:14px 14px; text-align:center;">
+    <div style="font-size:11px; color:var(--muted); font-weight:800; letter-spacing:.08em;">II</div>
+    <div style="font-weight:900; font-size:15px; color:var(--green-dark); margin:4px 0;">שני מנועים</div>
+    <div style="font-size:12px; color:var(--muted); line-height:1.3;">חיפוש היברידי +<br>גרף ידע</div>
+  </div>
+  <div style="background:var(--gold-light); border:1px solid #E8D9A0; border-top:3px solid var(--gold); border-radius:12px; padding:14px 14px; text-align:center;">
+    <div style="font-size:11px; color:var(--gold-dark); font-weight:800; letter-spacing:.08em;">III</div>
+    <div style="font-weight:900; font-size:15px; color:var(--gold-dark); margin:4px 0;">גדרות למודל חלש</div>
+    <div style="font-size:12px; color:#6B5A0A; line-height:1.3;">lifecycle + סקריפטים<br>+ רובריקות</div>
+  </div>
+</div>
+<p><strong>א' — פועל בפועל ברשת הסגורה</strong> — כל תלות ארוזה, כל API מותאם, מעבר גבול אחד לכל גרסה.</p>
+
+<p><strong>ב' — שני מנועי שליפה, לא אחד</strong> — חיפוש היברידי לאיתור, גרף ידע לניתוח קשרים, ו-Obsidian לעיון אנושי.</p>
+
+<p><strong>ג' — מנגנוני בקרה המאפשרים למודל חלש לספק תוצאות</strong> — מחזור חיים מוגדר, סקריפטים דטרמיניסטיים ו-skills המצמצמים את מרחב ההחלטה של המודל.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">יתרונות תחרותיים — שלושה חסמים משמעותיים</span>
+        <span class="slide-count">09 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="10">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">הפעלה ברשת סגורה אינה שלב פריסה — היא ליבת הפרויקט</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>כלי המניח קיום registry, הורדת מודל או קומפיילר עם גישה לרשת — פשוט אינו פועל ברשת הסגורה.</p>
+
+<p><strong>אפס תלויות</strong> — ה-CLI מבוסס על ספריית הסטנדרט בלבד (pure stdlib). אין מה לפתור, אין מה לסנכרן.</p>
+
+<p><strong>מנועים מוכנים מראש</strong> — מודולים native מקומפלים מחוץ לרשת מול ה-ABI המדויק של היעד ונכנסים כיחידה אחת.</p>
+
+<p><strong>ללא צורך ב-GPU</strong> — החיפוש פועל מול נקודת הקצה (endpoint) הפנימית להסקה, לא מול קבצי מודל מקומיים.</p>
+
+<p><strong>מעבר אחד לכל גרסה</strong> — לאחר ההעברה, עדכון ברשת הסגורה הוא התקנה רגילה ברשת הפנימית.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">הפעלה ברשת סגורה אינה שלב פריסה — היא ליבת הפרויקט</span>
+        <span class="slide-count">10 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="11">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">שאלות שונות דורשות מנועים שונים — אינדקס וקטורי יחיד נותן מענה מיטבי לסוג שאלות אחד ואינו מספק לשאר.</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>איתור ממוקד — "מצא את ה-note על X"</strong> → QMD — חיפוש היברידי, מילות מפתח + וקטורים. <strong>ניתוח קשרים — "כיצד X קשור ל-Y?"</strong> → GRAPHIFY — גרף ישויות וקשרים. <strong>עיון חופשי</strong> → OBSIDIAN — דפדוף ועריכה אנושית.</p>
+
+<p>סט קבצים אחד — wiki/ · index/ · raw/ — קבצי Markdown מקושרים על הדיסק. דבר אינו נעול בתוך מסד נתונים שיהיה צורך לחלץ ממנו.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">שאלות שונות דורשות מנועים שונים — אינדקס וקטורי יחיד נותן מענה מיטבי לסוג שאלות אחד ואינו מספק לשאר.</span>
+        <span class="slide-count">11 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="12">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">צמצום מרחב ההחלטה של המודל — כך מודל חלש הופך למספיק</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>עבודת החשיבה המורכבת מתבצעת מחוץ לרשת הסגורה, עם מודל מתקדם, פעם אחת — ונכנסת פנימה כמבנה מוכן.</p>
+
+<p><strong>LIFECYCLE</strong> — שלב מוגדר לכל פעולה, כך שהמודל אינו נדרש להמציא תכנית.</p>
+
+<p><strong>SCRIPTS</strong> — הקמת תשתית, רישום, תיעוד ואימות — דטרמיניסטיים. המודל כותב פרוזה בלבד.</p>
+
+<p><strong>SKILLS</strong> — ארבעה skills תפעוליים — setup, הכנסה ל-wiki, query, lint — כל אחד עוטף את ה-CLI הנדרש לו.</p>
+
+<p><strong>RUBRICS</strong> — החלטות בחירה סגורה מול עוגנים קבועים. לעולם לא שיפוט חופשי ופתוח.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">צמצום מרחב ההחלטה של המודל — כך מודל חלש הופך למספיק</span>
+        <span class="slide-count">12 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="13">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">vault מבצע שלוש פעולות בלבד</h2>
+        <div class="he-content" dir="rtl" lang="he">
+<div style="display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin:10px 0; direction:rtl; text-align:center;">
+  <div style="border:2px solid var(--green); border-radius:14px; padding:18px 12px; background:white;">
+    <div style="width:36px; height:36px; border-radius:50%; background:var(--green); color:white; display:flex; align-items:center; justify-content:center; font-weight:900; margin:0 auto 8px;">01</div>
+    <div style="font-weight:900; color:var(--green-dark);">סטאפ</div>
+    <div style="font-size:12px; color:var(--muted); margin-top:4px;">הנחת framework<br>ורישום מנועים</div>
+  </div>
+  <div style="border:2px solid var(--green); border-radius:14px; padding:18px 12px; background:var(--green-light);">
+    <div style="width:36px; height:36px; border-radius:50%; background:var(--green-dark); color:white; display:flex; align-items:center; justify-content:center; font-weight:900; margin:0 auto 8px;">02</div>
+    <div style="font-weight:900; color:var(--green-dark);">הכנסה ל-wiki</div>
+    <div style="font-size:12px; color:var(--muted); margin-top:4px;">מסמך → notes<br>אטומיים מקושרים</div>
+  </div>
+  <div style="border:2px solid var(--gold); border-radius:14px; padding:18px 12px; background:var(--gold-light);">
+    <div style="width:36px; height:36px; border-radius:50%; background:var(--gold); color:white; display:flex; align-items:center; justify-content:center; font-weight:900; margin:0 auto 8px;">03</div>
+    <div style="font-weight:900; color:var(--gold-dark);">שאילתא</div>
+    <div style="font-size:12px; color:#6B5A0A; margin-top:4px;">תשובה מעוגנת<br>או סירוב</div>
+  </div>
+</div>
+<div style="display:flex; align-items:center; justify-content:center; gap:0; margin:6px 0 4px; direction:rtl;">
+  <span style="flex:1; height:2px; background:var(--green);"></span><span style="width:0; height:0; border-right:8px solid var(--green); border-top:5px solid transparent; border-bottom:5px solid transparent;"></span>
+  <span style="width:24px;"></span>
+  <span style="flex:1; height:2px; background:var(--green);"></span><span style="width:0; height:0; border-right:8px solid var(--green); border-top:5px solid transparent; border-bottom:5px solid transparent;"></span>
+</div>
+<p><strong>01 סטאפ</strong> — הנחת ה-framework, רישום המנועים ואימות שה-bootstrap פועל כנדרש.</p>
+
+<p><strong>02 הכנסה ל-wiki</strong> — הפיכת מסמך מקור ל-notes אטומיים, מקושרים ורשומים.</p>
+
+<p><strong>03 שאילתא</strong> — מענה על שאלה מתוך ה-vault עם ציטוט ומקור — או ציון מפורש כי אין כיסוי.</p>
+
+<p>השלישי הוא המוצר. השניים הראשונים קיימים כדי שניתן יהיה לסמוך עליו.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">vault מבצע שלוש פעולות בלבד</span>
+        <span class="slide-count">13 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="14">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">פשטות מכוונת — כל תהליך ההתקנה והשדרוג הוא שתי פקודות המוכרות לכלל הארגון.</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><code>$ pip install --upgrade second-brain-vault-framework</code> <code>$ vault upgrade ./my-vault</code></p>
+
+<p><strong>התשתית אחראית על הקבצים שלה</strong> — skills, סקריפטים ו-schema נמצאים בקבצים בבעלות ה-framework ומוחלפים במלואם בעת שדרוג.</p>
+
+<p><strong>אתם אחראים על התוכן שלכם</strong> — מקורות, notes ואינדקסים — שדרוג לעולם אינו נוגע בהם. ללא התנגשויות מיזוג (merge conflicts).</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">פשטות מכוונת — כל תהליך ההתקנה והשדרוג הוא שתי פקודות המוכרות לכלל הארגון.</span>
+        <span class="slide-count">14 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="15">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">הכנסת קורפוס אמיתי: שבעה שלבים מוגדרים — עבודה בתהליך.</h2>
+        <div class="he-content" dir="rtl" lang="he">
+<div class="pipeline-wrap" dir="rtl" style="margin: 6px 0 0;">
+  <!-- Steps -->
+  <div style="display:grid; grid-template-columns: 90px repeat(7,1fr); column-gap:10px; align-items:end; direction:rtl; text-align:right;">
+    <div></div>
+    <div style="border-top:3px solid var(--green); padding-top:10px;">
+      <div style="font-size:11px; color:var(--muted); font-weight:700;">01</div>
+      <div style="font-weight:900; font-size:18px; color:var(--green-dark); line-height:1;">כיול</div>
+      <div style="font-size:11px; color:var(--muted); line-height:1.3; margin-top:4px;">כיול על דוגמאות<br>מתויגות</div>
+    </div>
+    <div style="border-top:3px solid var(--green); padding-top:10px;">
+      <div style="font-size:11px; color:var(--muted); font-weight:700;">02</div>
+      <div style="font-weight:900; font-size:18px; color:var(--green-dark); line-height:1;">פילטור</div>
+      <div style="font-size:11px; color:var(--muted); line-height:1.3; margin-top:4px;">הסרת כפילויות<br>וברעש</div>
+    </div>
+    <div style="border-top:3px solid var(--green); padding-top:10px;">
+      <div style="font-size:11px; color:var(--muted); font-weight:700;">03</div>
+      <div style="font-weight:900; font-size:18px; color:var(--green-dark); line-height:1;">מילון</div>
+      <div style="font-size:11px; color:var(--muted); line-height:1.3; margin-top:4px;">בניית מילון<br>ייעודי + GT</div>
+    </div>
+    <div style="border-top:3px solid var(--gold); padding-top:10px;">
+      <div style="font-size:11px; color:var(--muted); font-weight:700;">04</div>
+      <div style="font-weight:900; font-size:18px; color:var(--gold-dark); line-height:1;">תרגום</div>
+      <div style="font-size:11px; color:var(--muted); line-height:1.3; margin-top:4px;">תרגום כלל<br>המסמכים</div>
+    </div>
+    <div style="border-top:3px solid var(--gold); padding-top:10px;">
+      <div style="font-size:11px; color:var(--muted); font-weight:700;">05</div>
+      <div style="font-weight:900; font-size:18px; color:var(--gold-dark); line-height:1;">סיווג</div>
+      <div style="font-size:11px; color:var(--muted); line-height:1.3; margin-top:4px;">type / trust<br>/ level</div>
+    </div>
+    <div style="border-top:3px solid var(--green); padding-top:10px;">
+      <div style="font-size:11px; color:var(--muted); font-weight:700;">06</div>
+      <div style="font-weight:900; font-size:18px; color:var(--green-dark); line-height:1;">הכנסה</div>
+      <div style="font-size:11px; color:var(--muted); line-height:1.3; margin-top:4px;">יסודות ואז<br>מתקדם</div>
+    </div>
+    <div style="border-top:3px solid var(--green); padding-top:10px;">
+      <div style="font-size:11px; color:var(--muted); font-weight:700;">07</div>
+      <div style="font-weight:900; font-size:18px; color:var(--green-dark); line-height:1;">בדיקה</div>
+      <div style="font-size:11px; color:var(--muted); line-height:1.3; margin-top:4px;">שאלות זהב<br>+ lint</div>
+    </div>
+  </div>
+
+  <!-- Arrow -->
+  <div style="display:flex; align-items:center; margin:14px 0 16px; padding-right:90px; direction:rtl;">
+    <div style="height:1px; background:var(--border); flex:1;"></div>
+    <div style="width:0; height:0; border-right:10px solid var(--border); border-top:6px solid transparent; border-bottom:6px solid transparent; margin-right:-1px;"></div>
+  </div>
+
+  <!-- Responsibility matrix - 2 colors: מבצע (filled) vs מבקר (outline), Y-axis = actor -->
+  <div style="display:grid; grid-template-columns: 90px repeat(7,1fr); column-gap:10px; row-gap:8px; align-items:center; direction:rtl; font-size:11px;">
+    <div style="font-weight:800; letter-spacing:.06em; color:var(--muted); text-align:right;">סקריפט</div>
+    <div style="height:14px; background:white; border:1px solid #E0E8E0; border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:white; border:1px solid #E0E8E0; border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:white; border:1px solid #E0E8E0; border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+
+    <div style="font-weight:800; letter-spacing:.06em; color:var(--muted); text-align:right;">מודל</div>
+    <div style="height:14px; background:var(--gold); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:white; border:1px solid #E0E8E0; border-radius:2px;"></div>
+
+    <div style="font-weight:800; letter-spacing:.06em; color:var(--muted); text-align:right;">מומחה</div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--gold); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--gold); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--gold); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--gold); border-radius:2px;"></div>
+    <div style="height:14px; background:var(--green-dark); border-radius:2px;"></div>
+  </div>
+
+  <div style="display:flex; gap:20px; margin-top:10px; font-size:11px; color:var(--muted); direction:rtl;">
+    <span style="display:flex; align-items:center; gap:6px;"><span style="width:16px; height:10px; background:var(--green-dark); display:inline-block; border-radius:2px;"></span> מבצע</span>
+    <span style="display:flex; align-items:center; gap:6px;"><span style="width:16px; height:10px; background:var(--gold); display:inline-block; border-radius:2px;"></span> מבקר / דוגם</span>
+  </div>
+</div>
+<div style="margin-top:18px; font-size:13px; color:var(--muted); border-top:1px solid var(--border); padding-top:12px;"><p><strong>01 כיול</strong> — כיול המודל על דוגמאות שתויגו על ידי המומחה</p>
+
+<p><strong>02 פילטור</strong> — סינון כפילויות, boilerplate ותוכן שאינו רלוונטי</p>
+
+<p><strong>03 בניית מילון ייעודי</strong> — הזרקת הגדרות GT (Ground Truth) ובניית מילון ייעודי לתחום (glossary) למונחים הנפוצים בקורפוס אך נדירים מחוצה לו</p>
+
+<p><strong>04 תרגום המסמכים</strong> — תרגום כלל המסמכים מעברית לאנגלית תוך שימוש במילון הייעודי</p>
+
+<p><strong>05 סיווג</strong> — סיווג type/trust/level מתוך רשימה סגורה</p>
+
+<p><strong>06 הכנסה ל-wiki</strong> — תחילה חומר יסוד, לאחר מכן חומר מתקדם</p>
+
+<p><strong>07 בדיקה</strong> — שאלות זהב, בקרות שליליות, lint</p>
+
+<p>SCRIPT מבצע — MODEL — EXPERT מבקר או דוגם</p></div></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">הכנסת קורפוס אמיתי: שבעה שלבים מוגדרים — עבודה בתהליך.</span>
+        <span class="slide-count">15 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="16">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">צוותים נוספים מתמודדים עם אותה בעיית הכנסה ל-wiki — כל אחד בנפרד, בשולי משימה אחרת</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>הקורפוס שונה. השאלות — מה לשמור, באיזה סדר, מי שופט — זהות.</p>
+
+<p>פרויקט זה הוא היחיד המוקדש לחקר הנושא במשרה מלאה, במטרה להחזיר תכנית לבניית מסלול הכניסה ל wiki עם שלבים ורובריקות שכל צוות יוכל ליישם.</p>
+
+<p>בנוסף, קיימת חפיפה משמעותית מאוד בידע של הדומיין, ולכן נכון יהיה ליצור wiki פר מערכה במרכז, ועליו כל צוות יוסיף את הידע הספציפי שלו, ואולי גם פר תפקידן.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">צוותים נוספים מתמודדים עם אותה בעיית הכנסה ל-wiki — כל אחד בנפרד, בשולי משימה אחרת</span>
+        <span class="slide-count">16 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="17">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">סטטוס הפרויקט</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>פעיל ויציב</strong> — ה-framework מתקין, מבצע scaffold, הכנסה ל-wiki, query ו-lint — עם vault רפרנס ש-CI מוודא את תקינותו. שני מנועי השליפה פועלים ברשת הסגורה ללא GPU.</p>
+
+<p><strong>בהתקדמות</strong> — קורפוס לקוח ראשון: מסלול הכניסה ל wiki מוגדר מקצה לקצה, כיול הושלם, שלב הסינון בעיצומו. השלב הבא: השלמת הסינון, הרצת קמפיין הדומיין הראשון עד לעמידה בקריטריוני איכות.</p>
+
+<p>תהליך החפיפה ל-Genie בעיצומו — חומרים הועברו והועברה סקירה טכנית מעמיקה.</p>
+
+<p>הבקשות:</p>
+
+<ol type="1">
+
+<li>הקצאת זמן להשלמת דומיין אחד מקצה לקצה, והפיכתו לתבנית ארגונית לשכפול.</li>
+
+<li>הקצאת אנשים, בדגש על חייל מצוות ג'יני. משה משתחרר בקרוב ולכן לפני השחרור יש להעביר מקל לחייב בצוות ג'יני שיוביל את הפרויקט.</li>
+
+</ol></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">סטטוס הפרויקט</span>
+        <span class="slide-count">17 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="18">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">חלק ב&#x27; — צלילה טכנית</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>כיצד ה-vault בנוי, כיצד מעבירים אותו לרשת הסגורה, ומה המנועים מבצעים בפועל.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">חלק ב&#x27; — צלילה טכנית</span>
+        <span class="slide-count">18 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="19">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">שלוש שכבות, כלל אחד לכל שכבה</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>index/</strong> — מפת תוכן, רישום מקורות, לוג, תובנות — שכבת הניווט</p>
+
+<p><strong>wiki/</strong> — רעיון אחד לכל note, עם frontmatter חובה, מקושר למקורות ב-wikilink</p>
+
+<p><strong>raw/</strong> — ראיות בלתי ניתנות לשינוי. לעולם אינן נערכות, אינן משנות שם ואינן נמחקות. הסינתזה זורמת כלפי מעלה, הציטוטים מצביעים כלפי מטה</p>
+
+<p><strong>tests/</strong> — תשובות זהב, מחוץ ל-stack במכוון ולעולם אינן מאונדקסות — אחרת ה-eval זולג ל-retrieval וכל ציון הופך לבלתי אמין.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">שלוש שכבות, כלל אחד לכל שכבה</span>
+        <span class="slide-count">19 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="20">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">סטאפ מסתיים בהוכחת תקינות, לא בהנחת קבצים</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><code>$ vault scaffold "MT Knowledge"</code> # הנחת ה-framework <code>$ vault check</code> # חייב להסתיים ב-0 <code>$ qmd doctor</code> # backend תקין</p>
+
+<p><strong>בדיקה מבנית</strong> — קישורים תקינים, אין stubs פתוחים, אין drift של ה-framework, אוסף ה-eval אינו רשום.</p>
+
+<p><strong>בדיקה התנהגותית</strong> — סוויטת בדיקות קצרה: האם המערכת עונה על מה שהיא יודעת, ומסרבת להשיב על מה שאינה מכסה?</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">סטאפ מסתיים בהוכחת תקינות, לא בהנחת קבצים</span>
+        <span class="slide-count">20 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="21">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">מסמך אחד הופך ל-notes</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>01 חיפוש מקדים</strong> — איתור notes קשורים לפני כתיבה — עדכון עדיף על כפילות.</p>
+
+<p><strong>02 יצירת תשתית אוטומטית</strong> — תקציר, שורה ב-registry ורשומת לוג נוצרים על ידי סקריפט, לא נכתבים ידנית.</p>
+
+<p><strong>03 מילוי התבנית</strong> — המודל כותב את גוף ה-note בלבד, לתוך תבנית קבועה.</p>
+
+<p><strong>04 קישור לניווט</strong> — מפת התוכן והתובנות מתעדכנות באופן מובנה (by construction).</p>
+
+<p><strong>05 בדיקה ולאחריה אינדוקס מחדש</strong> — אימות חייב לעבור לפני עדכון מנועי החיפוש והגרף.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">מסמך אחד הופך ל-notes</span>
+        <span class="slide-count">21 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="22">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">תשובה מעוגנת או סירוב מפורש — אם אין כיסוי ב-vault, יש לציין זאת.</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>שליפה ולאחריה טענה</strong> — חיפוש לאיתור, גרף ל-multi-hop, שליפת המסמך המלא לפני כל קביעה, ציטוט ה-note או מקורו.</p>
+
+<p><strong>כתיבה חזרה</strong> — אם המענה יצר סינתזה חדשה ומהותית בין מקורות, היא הופכת ל-note. ה-vault משתבח עם השימוש.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">תשובה מעוגנת או סירוב מפורש — אם אין כיסוי ב-vault, יש לציין זאת.</span>
+        <span class="slide-count">22 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="23">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">כפי שזה נראה על המסך</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>ה-wiki כתצוגת רשת — notes מקובצים לפי רעיון, לא לפי תיקייה. אימות fail-closed, והממצאים שהוא אינו מאפשר להעביר. תיקייה לכל שלב, עם שאלות מנחות שהמומחה ממלא.</p>
+<div style="display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-top:16px;">
+  <div style="background:#0D0D0F; border-radius:10px; overflow:hidden; border:1px solid #2A2A2E; aspect-ratio: 16/10;">
+    <img src="./obsidian-graph.png" alt="Obsidian graph view - notes clustered by concept" style="width:100%; height:100%; object-fit:cover; display:block;">
+  </div>
+  <div style="background:#0D0D0F; border-radius:10px; overflow:hidden; border:1px solid #2A2A2E; aspect-ratio: 16/10; padding:8px;">
+    <img src="./vault-check.png" alt="Terminal vault check FAIL" style="width:100%; height:100%; object-fit:contain; display:block;">
+  </div>
+  <div style="background:#0F0F10; border-radius:10px; overflow:hidden; border:1px solid #2A2A2E; aspect-ratio: 16/10; padding:10px;">
+    <img src="./ingest-pipeline-folder.png" alt="Ingest pipeline questionnaire folders" style="width:100%; height:100%; object-fit:contain; display:block;">
+  </div>
+</div>
+<div style="display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin-top:6px; font-size:11px; color:var(--muted); text-align:center;">
+  <span>ה-wiki כרשת</span><span>ולידציה fail-closed</span><span>שאלון — תיקייה לכל שלב</span>
+</div></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">כפי שזה נראה על המסך</span>
+        <span class="slide-count">23 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="24">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">אימות fail-closed — vault שאינו שלם לעולם אינו נראה גמור</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>קישורים שבורים · notes יתומים · stubs לא ממולאים · drift של ה-framework</strong></p>
+<div style="background:#0D0D0F; border-radius:10px; overflow:hidden; border:1px solid #2A2A2E; margin:14px 0; padding:8px;">
+  <img src="./vault-check.png" alt="vault check FAIL - 4 findings" style="width:100%; height:auto; display:block; border-radius:6px;">
+</div>
+
+<p>כל אחד מאלה מחזיר exit non-zero. המודל אינו יכול להכריז על סיום עבודה שה-checker דוחה — וזוהי בדיוק רשת הביטחון הנדרשת לפני האצלת עבודה למודל קטן.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">אימות fail-closed — vault שאינו שלם לעולם אינו נראה גמור</span>
+        <span class="slide-count">24 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="25">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">Framework ו-vault הם שני דברים שונים</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>ה-FRAMEWORK</strong> — חבילה שהארגון מתחזק — סכמה, skills, סקריפטים ותבניות. עם גרסאות, בדיקות, מוחלף במלואו בעת שדרוג.</p>
+
+<p><strong>VAULT</strong> — תיקייה בבעלות הצוות — המקורות שלו, ה-notes, האינדקסים — לצד אזור שמור לקונבנציות מקומיות.</p>
+
+<p>כל vault צוותי מקבל את השיפורים ללא צורך במיזוג כלשהו.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">Framework ו-vault הם שני דברים שונים</span>
+        <span class="slide-count">25 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="26">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">מעבר גבול אחד לכל גרסה</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>מחוץ לרשת — מחובר</strong> — קביעת גרסה ותג. בניית wheel. אריזת כל ארטיפקט שטרם נמצא באינדקס הפנימי. קומפילציה של מודולים native מול הפלטפורמה וה-runtime המדויקים של היעד. התקנה טרייה ברשת הסגורה אינה יכולה להצליח ללא זאת — זהו אילוץ מבני, לא בעיית קונפיגורציה.</p>
+
+<p><strong>בתוך הרשת — מנותק</strong> — פרסום חד-פעמי לאינדקס הפנימי. מכאן ואילך כל מכונה ברשת הסגורה משודרגת בהתקנה רגילה ברשת הפנימית — ללא העתקת קבצים, ללא היכרות עם פרטי המימוש.</p>
+
+<p>האימות אוטומטי: סקריפט ההתקנה מוודא שהבינארי והמודול ה-native נטענים לפני שמתגלה כשל בשטח.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">מעבר גבול אחד לכל גרסה</span>
+        <span class="slide-count">26 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="27">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">התאמת חיפוש לרשת סגורה ללא GPU — מנוע החיפוש טוען בדרך כלל קבצי מודל מקומיים ל-embeddings.</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>ללא tarball של מודל</strong> — מאות מגה-בייט של weights אינם נדרשים לחצות את הגבול או לשבת על כל מכונה.</p>
+
+<p><strong>ללא צורך ב-GPU</strong> — גם embeddings וגם generation מופנים לתשתית שכבר פועלת ברשת הסגורה.</p>
+
+<p><strong>ABI מאומת בהתקנה</strong> — סקריפט ההתקנה מוכיח שהמודולים המקומפלים נטענים על מכונה זו, ותופס אי-התאמות באופן מיידי.</p>
+
+<p><strong>הגרף מופץ כ-wheels</strong> — מנוע גרף הידע נארז באותו אופן — בנייה חד-פעמית מחוץ לרשת, והכנסת התוצר פנימה.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">התאמת חיפוש לרשת סגורה ללא GPU — מנוע החיפוש טוען בדרך כלל קבצי מודל מקומיים ל-embeddings.</span>
+        <span class="slide-count">27 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="28">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">חלק ב&#x27; — המשך — מסלול הכניסה ל wiki</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>הפיכת אלפי עמודים של תיעוד קיים ל-vault שניתן לסמוך עליו.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">חלק ב&#x27; — המשך — מסלול הכניסה ל wiki</span>
+        <span class="slide-count">28 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="29">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">תנאי העבודה בפועל</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>אלפי עמודים</strong> — ספייס קונפלואנס מלא + מסמכים מ-file-share, באיכות וגיל בלתי אחידים בעליל.</p>
+
+<p><strong>פער טרמינולוגי</strong> — המודל אינו מכיר את המונחים הייעודיים שלנו, לכן אנו מעגנים אותו באמצעות יצירת מילון מונחים מראש — חשיבה מורכבת מתבצעת רק כשהמודל מעוגן.</p>
+
+<p><strong>מודל חלש ברשת הסגורה</strong> — יעיל לבחירות סגורות וממוקדות מול רובריקה. לעולם אינו אמון על סינתזה פתוחה.</p>
+
+<p><strong>מומחה אחד מעורב בפרויקט</strong> — זמין שעות ביום — לכן תורי הביקורת ישימים, והם רשת הביטחון.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">תנאי העבודה בפועל</span>
+        <span class="slide-count">29 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="30">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">סינון בשלושה נתיבים — כל בדיקה עם שם, גרסה ורישום נפרד — כך שניתן לשאול בדיעבד איזה כלל פסל מה ומדוע.</h2>
+        <div class="he-content" dir="rtl" lang="he">
+<div style="display:grid; grid-template-columns: repeat(3,1fr); gap:12px; margin:10px 0; direction:rtl; text-align:center;">
+  <div style="border:1px solid var(--border); border-top:4px solid var(--green-dark); border-radius:12px; padding:14px 10px; background:white;">
+    <div style="font-size:11px; font-weight:800; letter-spacing:.08em; color:var(--green-dark);">GATE</div>
+    <div style="font-weight:900; font-size:14px; color:var(--ink); margin:4px 0;">כללים פוסלים</div>
+    <div style="font-size:11px; color:var(--muted); line-height:1.3;">ריק, boilerplate<br>כפילויות — דטרמיניסטי</div>
+    <div style="margin-top:8px; font-size:10px; background:var(--green-light); border-radius:6px; padding:4px;">reason code</div>
+  </div>
+  <div style="border:1px solid var(--border); border-top:4px solid var(--gold); border-radius:12px; padding:14px 10px; background:var(--gold-light);">
+    <div style="font-size:11px; font-weight:800; letter-spacing:.08em; color:var(--gold-dark);">EVIDENCE</div>
+    <div style="font-weight:900; font-size:14px; color:var(--ink); margin:4px 0;">סימנים מעשירים</div>
+    <div style="font-size:11px; color:var(--muted); line-height:1.3;">אנוטציות ל-reviewer<br>לא מכריעות לבד</div>
+  </div>
+  <div style="border:1px solid var(--border); border-top:4px solid var(--green); border-radius:12px; padding:14px 10px; background:white;">
+    <div style="font-size:11px; font-weight:800; letter-spacing:.08em; color:var(--green-dark);">JUDGE</div>
+    <div style="font-weight:900; font-size:14px; color:var(--ink); margin:4px 0;">המודל מכריע</div>
+    <div style="font-size:11px; color:var(--muted); line-height:1.3;">בפנים / בחוץ<br>או לא ניתן להכריע</div>
+    <div style="margin-top:8px; font-size:10px; background:var(--green-light); border-radius:6px; padding:4px;">→ תור מומחה</div>
+  </div>
+</div>
+<p><strong>כללים פוסלים</strong> — עמודים ריקים, boilerplate, stubs ניווט, כמעט-כפילויות ועותקי גרסאות. דטרמיניסטי, עם reason code.</p>
+
+<p><strong>סימנים מעשירים</strong> — אנוטציות המעצבות את ההכרעה ומסייעות ל-reviewer, אך לעולם אינן מכריעות לבדן.</p>
+
+<p><strong>המודל מכריע</strong> — בפנים, בחוץ, או לא ניתן להכריע. הכרעות בביטחון גבוה עומדות; היתר מופנה לתור המומחה.</p>
+
+<p>מסמכים שנפסלו שומרים רישום לצמיתות — כל החלטה ניתנת לביקורת ולשחזור.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">סינון בשלושה נתיבים — כל בדיקה עם שם, גרסה ורישום נפרד — כך שניתן לשאול בדיעבד איזה כלל פסל מה ומדוע.</span>
+        <span class="slide-count">30 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="31">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">קמפיינים לפי תחום, מתוכננים באמצעות שאלון — העבודה מחולקת לקמפיינים לפי תחום, ומבוצעת לפי סדר תלויות.</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>קמפיין 1 — יסודות</strong> — רמת ה-trust הגבוהה ביותר. רץ ראשון וכותב את ה-concept notes.</p>
+
+<p><strong>קמפיינים 2 — תחום A</strong> - תלוי ביסודות הבסיסיים בלבד</p>
+
+<p><strong>קמפיין 3 — תחום B</strong> - חייב להשתמש בידע היסודי, יכול להשתמש בידע מקמפיין 2</p>
+
+<p><strong>קמפיין 4 — תחום C</strong> - - חייב להשתמש בידע היסודי, יכול להשתמש בידע מקמפיינים 2 ו 3</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">קמפיינים לפי תחום, מתוכננים באמצעות שאלון — העבודה מחולקת לקמפיינים לפי תחום, ומבוצעת לפי סדר תלויות.</span>
+        <span class="slide-count">31 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="32">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">כל החלטה על כל מסמך, נשמרת לצמיתות — מסמך אחד כפי שה-ledger רואה אותו</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>נכנס → hash → עבר gate → כלל → נשפט in-scope → מודל → עוגן (GT) → מודל+מומחה → סווג → מודל → הוכנס → מודל+סקריפט → אומת → מומחה</p>
+
+<p><strong>כתיבה בלבד, ללא עריכה</strong> — אירועים לעולם אינם נדרסים. המצב הנוכחי הוא projection של הלוג.</p>
+
+<p><strong>ניתן להרצה מחדש</strong> — שלבים לעולם אינם משנים את הקלט שלהם וכתיבות הן אטומיות — שחזור הוא פשוט הרצה חוזרת.</p>
+
+<p><strong>היסטוריה חסכונית</strong> — ארטיפקטים כבדים יושבים ב-store לפי תוכן; רק שכבת הטקסט המצומצמת מגורסנת.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">כל החלטה על כל מסמך, נשמרת לצמיתות — מסמך אחד כפי שה-ledger רואה אותו</span>
+        <span class="slide-count">32 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="33">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">מה המשמעות של פיילוט מוצלח</h2>
+        <div class="he-content" dir="rtl" lang="he"><p><strong>תחום אחד מקצה לקצה</strong> — מסונן, מעוגן (GT), מסווג, מוכנס וניתן לשאילתא אצל הלקוח, בעוד תחומים נוספים עדיין ממתינים בתור.</p>
+
+<p><strong>תשובות עם מקורות</strong> — שאלות זהב עוברות, ובקרות שליליות מקבלות חיווי "אין כיסוי" ולא תשובה מומצאת.</p>
+
+<p><strong>הכל מוסבר</strong> — לכל מסמך ה-ledger מציין היכן הוא ומדוע — כולל כל מה שנפסל.</p>
+
+<p><strong>ניתן לשחזור</strong> — צוות נוסף יכול לקחת את השאלון והגדרות השלבים ולהתחיל באופן עצמאי.</p></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">מה המשמעות של פיילוט מוצלח</span>
+        <span class="slide-count">33 / 34</span>
+      </div>
+    </section>
+    
+
+    <section class="slide" data-slide="34">
+      <div class="slide-inner">
+        <h2 class="he-title" dir="rtl" lang="he">מערכת ידע הפועלת היכן שהידע כבר נמצא.</h2>
+        <div class="he-content" dir="rtl" lang="he"><p>מסלול הכניסה ל wiki ששאר הארגון יכול לאמץ.</p>
+
+<p>הבקשות:</p>
+
+<ol type="1">
+
+<li>הקצאת זמן להשלמת תחום אחד מקצה לקצה והפיכתו לתבנית ארגונית.</li>
+
+<li>הקצאת חייל מצוות ג'יני להחלפת משה (משתחרר בקרוב) ולהובלת הפרויקט בהמשך.</li>
+
+</ol></div>
+      </div>
+      <div class="slide-footer">
+        <span class="slide-label" dir="rtl" lang="he">מערכת ידע הפועלת היכן שהידע כבר נמצא.</span>
+        <span class="slide-count">34 / 34</span>
+      </div>
+    </section>
+    
+  </div>
+  <div class="hint">← → / PageUp PageDown / רווח — ניווט · Home/End — התחלה/סוף</div>
+<script>
+let cur=0;const slides=Array.from(document.querySelectorAll('.slide'));const counter=document.getElementById('counter');const progress=document.getElementById('progress');const prevBtn=document.getElementById('prev');const nextBtn=document.getElementById('next');
+function render(){slides.forEach((s,i)=>s.classList.toggle('active',i===cur));counter.textContent=(cur+1)+' / '+slides.length;progress.style.width=((cur+1)/slides.length*100).toFixed(2)+'%';prevBtn.disabled=cur===0;nextBtn.disabled=cur===slides.length-1;location.hash='slide-'+(cur+1);}
+prevBtn.onclick=()=>{if(cur>0)cur--;render();};nextBtn.onclick=()=>{if(cur<slides.length-1)cur++;render();};
+document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='PageDown'||e.key===' ' ){e.preventDefault();if(cur<slides.length-1)cur++;render();}if(e.key==='ArrowRight'||e.key==='PageUp'){e.preventDefault();if(cur>0)cur--;render();}if(e.key==='Home'){cur=0;render();}if(e.key==='End'){cur=slides.length-1;render();}});
+let m=location.hash.match(/slide-(\d+)/);if(m){let n=parseInt(m[1],10)-1;if(n>=0&&n<slides.length)cur=n;}render();
+</script>
+</body>
+</html>
