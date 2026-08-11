@@ -1,6 +1,6 @@
-# Second Brain Offline — Deck (Bilingual: English + עברית)
+# Bunker — באנקר — Deck (Bilingual: English + עברית)
 
-> **Source:** `docs/superpowers/user/# Second Brain Offline Project/Second Brain Offline.html` (34 slides) — bundled
+> **Source:** `docs/superpowers/user/# Second Brain Offline Project/Bunker.html` (34 slides) — bundled
 > deck (deck-stage)
 > **Conversion:** `pandoc -f html -t gfm --wrap=none` per `<section>` → `/tmp/slides_md/slide_*.md` + manual cleanup
 > (div soup stripped, headings preserved)
@@ -20,7 +20,7 @@
 
 ### English (pandoc)
 
-Second Brain Offline
+Bunker
 
 An AI-operable knowledge vault that runs inside the air gap
 
@@ -79,7 +79,7 @@ Deep-dive slides are marked in the top-right corner.
 
 ### English (pandoc)
 
-Two gaps block AI in our domains
+Three gaps block AI in our domains
 
 **01 Hallucination — it doesn't know our domains.** The model knows generic knowledge and almost nothing about our
 specific domains — so when asked, it hallucinates hard and with confidence.
@@ -275,7 +275,7 @@ Same idea, different problem
 
 | | LLM-WIKI | SECOND BRAIN OFFLINE |
 |-------|--------------------------|------------------------------------------------|
-| סביבה | מחשב נייד מחובר | רשת מנותקת, ללא GPU |
+| סביבה | מחשב נייד מחובר | רשת סגורה, ללא GPU |
 | מודל | המתקדם ביותר, זמין תמיד | מודל קטן ברשת הסגורה, מוגבל ומבוקר |
 | שליפה | המודל קורא את ה-wiki | חיפוש היברידי + גרף ידע + Obsidian |
 | תהליך | שיקול דעת חופשי של המודל | מחזור חיים מובנה, רובריקות, בדיקות fail-closed |
@@ -450,7 +450,7 @@ vault מבצע שלוש פעולות בלבד
 
 **03 שאילתא** — מענה על שאלה מתוך ה-vault עם ציטוט ומקור — או ציון מפורש כי אין כיסוי.
 
-השלישי הוא המוצר. השניים הראשונים קיימים כדי שניתן יהיה לסמוך עליו.
+השלישי הוא המוצר. השניים הראשונים קיימים כדי שניתן יהיה לסמוך עליו. (+ בדיקת lint רביעית כ-guardrail — `vault check`)
 
 </div>
 
@@ -487,51 +487,35 @@ conflicts).
 
 ---
 
-## Slide 13 — Ingest pipeline — Seven steps
+## Slide 13 — Ingest pipeline — Six steps
 
 ### English (pandoc)
 
-Getting a real corpus in: seven defined steps — Work in progress. Each step has an owner, an artifact, and a rubric — so a
-weak model and a busy expert can share the load.
+Six planning steps — `templates/ingest-pipeline/` (`README.md` is the source of truth). Each folder is a step with its own `QUESTIONS.md`, entry condition and artifact — a weak model and a busy expert split the work.
 
-**01 Assess** — Calibrate the model on expert-labelled samples
+**01 Assess** — `A1–A5` → `domains.md` + out-of-scope + authority map (needs nothing)
+**02 Filtering** — `C,D` → scope cards + deterministic filter seed rules + protect list (needs `domains.md`, `A3`)
+**03 Translation** — `I` (`I0–I5`) → translation policy + layered glossary org/domain (needs `domains.md`)
+**04 Classification** — `B,E` → `sources.md` + trust-tier map `T1–T5` + doc-type vocabulary (needs `domains.md`)
+**05 Domain model** — `A6,A7,F,G,H` → dependency graph + completeness loop + layer order + overlaps + work-unit sequence (needs `domains.md`, `sources.md`, a filtered+translated corpus)
+**06 Success criteria** — `J,K` → gold sample + reference translations + acceptance tests + definition of done (needs `domains.md`, `E1`, `H3`)
 
-**02 Filter** — Drop duplicates, boilerplate, out-of-scope
-
-**03 Build glossary** — Inject GT (Ground Truth) definitions into context, building a domain-specific dictionary (glossary) for terms common in team data but not on the internet
-
-**04 Translate** — Translate all documents from Hebrew to English using the glossary
-
-**05 Classify** — Type, trust and level from a frozen list
-
-**06 Ingest** — Foundations first, then advanced material
-
-**07 Verify** — Gold questions, negative controls, lint
-
-SCRIPT does the work — MODEL — EXPERT reviews or spot-checks
+Steps sign off independently; filtering can run while classification is still open. The actual ingest (document → notes) runs inside the work-unit sequence defined in 05/H, not as a separate planning step.
 
 ### עברית
 
 <div dir="rtl" lang="he">
 
-הכנסת קורפוס אמיתי: שבעה שלבים מוגדרים — עבודה בתהליך. לכל שלב אחראי, תוצר ורובריקה — כך שמודל חלש ומומחה עסוק יכולים
-לחלוק את העומס ביעילות.
+שישה שלבי תכנון — `templates/ingest-pipeline/` (`README.md` הוא המקור). כל תיקייה היא שלב עם `QUESTIONS.md` משלה, תנאי כניסה ותוצר — כך שמודל חלש ומומחה עסוק חולקים עומס.
 
-**01 כיול** — כיול המודל על דוגמאות שתויגו על ידי המומחה
+**01 Assess — מיפוי תחומים** — `A1–A5` → `domains.md` + רשימת out-of-scope + מפת סמכויות
+**02 Filtering — סינון** — `C,D` → כרטיסי scope + חוקי סינון דטרמיניסטיים + protect list
+**03 Translation — שפה ומינוח** — `I` + glossary מדורג (I0–I5) → מדיניות תרגום + glossary
+**04 Classification — סיווג** — `B,E` → `sources.md` + מפת trust tiers + אוצר סוגי מסמכים
+**05 Domain model — מודל תחום** — `A6,A7,F,G,H` → גרף תלויות + בדיקת שלמות + סדר שכבות + חפיפות + רצף work units
+**06 Success criteria — קריטריוני הצלחה** — `J,K` → gold sample + תרגומי ייחוס + שאלות קבלה + הגדרת done
 
-**02 פילטור** — סינון כפילויות, boilerplate ותוכן שאינו רלוונטי
-
-**03 בניית מילון ייעודי** — הזרקת הגדרות GT (Ground Truth) ובניית מילון ייעודי לתחום (glossary) למונחים הנפוצים בקורפוס אך נדירים מחוצה לו
-
-**04 תרגום המסמכים** — תרגום כלל המסמכים מעברית לאנגלית תוך שימוש במילון הייעודי
-
-**05 סיווג** — סיווג type/trust/level מתוך רשימה סגורה
-
-**06 הכנסה ל-wiki** — תחילה חומר יסוד, לאחר מכן חומר מתקדם
-
-**07 בדיקה** — שאלות זהב, בקרות שליליות, lint
-
-SCRIPT מבצע — MODEL — EXPERT מבקר או דוגם
+כל שלב נחתם בנפרד; ה-ingest עצמו רץ ברצף ה-work units של 05/H.
 
 </div>
 
