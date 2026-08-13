@@ -166,8 +166,8 @@ def scan_corpus(raw_dir: str) -> dict[str, int]:
         body = re.sub(r"<[^>]+>", " ", body)
         body = re.sub(r"[^\s]+@[^\s]+", "", body)
 
-        # Extract alphanumeric sequences (Latin + Hebrew)
-        words_raw = re.findall(r"[A-Za-z֐-׿]{2,}", body)
+        # Extract alphanumeric sequences (Latin + Hebrew + digits)
+        words_raw = re.findall(r"[A-Za-z0-9֐-׿]{2,}", body)
 
         for word in words_raw:
             if _is_hebrew(word):
