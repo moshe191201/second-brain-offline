@@ -16,9 +16,15 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
 import pypdfium2 as pdfium
 import requests
+
+
+class PdfSplitCfg(TypedDict):
+    split_threshold: int
+    chunk_pages: int
 
 
 @dataclass(frozen=True)
@@ -46,6 +52,18 @@ class DoclingClient:
         self.max_retries = self._settings.max_retries
         self.retry_delay = self._settings.retry_delay
         self.poll_interval = self._settings.poll_interval
+
+    def is_reachable(self, timeout: float = 1.0) -> bool:
+        """Quick probe if docling-serve is reachable; no exception on failure."""
+        try:
+            requests.get(f"{self.base_url}/health", timeout=timeout).raise_for_status()
+            return True
+        except Exception:  # noqa: BLE001
+            try:
+                requests.get(f"{self.base_url}/v1/status/poll/test", timeout=timeout)
+                return True
+            except Exception:  # noqa: BLE001
+                return False
 
     def convert_file(self, path: Path) -> str:
         """Convert one file via the docling API; returns markdown."""
@@ -123,7 +141,7 @@ def split_pdf(path: Path, chunk_pages: int, out_dir: Path) -> list[Path]:
     return chunks
 
 
-def convert(path: Path, client: DoclingClient, config: dict) -> str:
+def convert(path: Path, client: DoclingClient, config: PdfSplitCfg) -> str:
     """Convert a file through docling; large PDFs are split and recombined."""
     path = Path(path)
     threshold = config.get("split_threshold", 100)

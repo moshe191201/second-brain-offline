@@ -153,6 +153,43 @@ class TestEndToEnd(VaultCase):
         self.assertIn("error", entry)
 
 
+class TestDedup(VaultCase):
+    """Spec §13 + §15: dataset-wide content-hash dedup (3 recommended cases)."""
+
+    def test_identical_content_different_names(self):
+        (self.vault / "raw" / "a.txt").write_text("same content", encoding="utf-8")
+        (self.vault / "raw" / "b.txt").write_text("same content", encoding="utf-8")
+        report = run(self.vault)
+        # One converted, one duplicate (no raw_md output for duplicate)
+        statuses = {k: v["status"] for k, v in report["files"].items() if k in ("a.txt", "b.txt")}
+        self.assertEqual(sorted(statuses.values()), ["converted", "duplicate"])
+        dup = [k for k, v in statuses.items() if v == "duplicate"][0]
+        canon = [k for k, v in statuses.items() if v == "converted"][0]
+        self.assertEqual(report["files"][dup]["duplicate_of"], canon)
+        self.assertIn("hash", report["files"][dup])
+        self.assertFalse((self.vault / "raw_md" / Path(dup).with_suffix(".md")).exists())
+        self.assertTrue((self.vault / "raw_md" / Path(canon).with_suffix(".md")).exists())
+
+    def test_sorted_winner_deterministic(self):
+        # Lexicographically first wins even if created second
+        (self.vault / "raw" / "z.txt").write_text("dup", encoding="utf-8")
+        (self.vault / "raw" / "a.txt").write_text("dup", encoding="utf-8")
+        report = run(self.vault)
+        self.assertEqual(report["files"]["z.txt"]["status"], "duplicate")
+        self.assertEqual(report["files"]["z.txt"]["duplicate_of"], "a.txt")
+        self.assertEqual(report["files"]["a.txt"]["status"], "converted")
+
+    def test_force_does_not_override_dedup(self):
+        (self.vault / "raw" / "a.txt").write_text("again same", encoding="utf-8")
+        (self.vault / "raw" / "b.txt").write_text("again same", encoding="utf-8")
+        run(self.vault)
+        report2 = run(self.vault, force=True)
+        # Duplicate stays suppressed even with --force (spec §13)
+        self.assertEqual(report2["files"]["b.txt"]["status"], "duplicate")
+        self.assertEqual(report2["files"]["b.txt"]["duplicate_of"], "a.txt")
+        self.assertFalse((self.vault / "raw_md" / "b.md").exists())
+
+
 class TestUnits(unittest.TestCase):
     def test_load_config_defaults(self):
         with tempfile.TemporaryDirectory() as td:

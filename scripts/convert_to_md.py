@@ -7,10 +7,14 @@ Usage:
 Routing (one converter per extension, no cross-library retry):
     .pdf .docx .pptx     -> docling-serve HTTP API (see docling_convert.py)
     .html .htm           -> pandoc  (pandoc -f html -t gfm --wrap=none)
-    .txt                 -> markitdown
+    .txt                 -> markitdown (required - fail if missing)
     .msg                 -> extract_msg
     .eml                 -> stdlib email
-    everything else      -> skipped
+    .one .onepkg .onetoc2 -> OfficeIMO.OneNote offline parser (see onenote_conversion.py)
+                          + docling/pandoc/markitdown for embedded attachments
+                          Requires .NET SDK 8.0+ (once) to build scripts/OneNoteOffline;
+                          published output is self-contained. No OneNote/COM needed.
+    everything else      -> skipped (incl. xlsx/csv per spec, reported not retried)
 
 Two passes: textual formats first (they feed the persistent Hebrew
 dictionary), then PDFs (OCR output is checked against that dictionary but
@@ -26,6 +30,7 @@ import email.utils
 import hashlib
 import json
 import re
+import shutil
 import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -34,18 +39,53 @@ from pathlib import Path
 
 import yaml
 
+from typing import TypedDict
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import docling_convert
 import hebrew_fix
 
+try:
+    import onenote_conversion
+    HAS_ONENOTE = True
+except ImportError:
+    HAS_ONENOTE = False
+
 DOCLING_EXTS = {".pdf", ".docx", ".pptx"}
+ONENOTE_EXTS = {".one", ".onepkg", ".onetoc2"}
 ROUTING = {**{e: "docling" for e in DOCLING_EXTS},
            ".txt": "markitdown", ".msg": "msg", ".eml": "email",
-           ".html": "pandoc", ".htm": "pandoc"}
+           ".html": "pandoc", ".htm": "pandoc",
+           **{e: "onenote" for e in ONENOTE_EXTS}}
 
-DEFAULT_CONFIG = {
+
+class DoclingCfg(TypedDict):
+    url: str
+    workers: int
+    timeout: float
+    retry_delay: float
+    poll_interval: float
+
+
+class PdfCfg(TypedDict):
+    split_threshold: int
+    chunk_pages: int
+
+
+class HebrewCfg(TypedDict):
+    dict_path: str
+    ambiguity_margin: float
+
+
+class VaultCfg(TypedDict):
+    docling: DoclingCfg
+    pdf: PdfCfg
+    hebrew: HebrewCfg
+
+
+DEFAULT_CONFIG: VaultCfg = {
     "docling": {"url": "http://localhost:5001", "workers": 1,
-                "timeout": 300, "retry_delay": 1.0},
+                "timeout": 300, "retry_delay": 1.0, "poll_interval": 2.0},
     "pdf": {"split_threshold": 100, "chunk_pages": 50},
     "hebrew": {"dict_path": "data/hebrew_dict.json", "ambiguity_margin": 2.0},
 }
@@ -55,16 +95,16 @@ RECENT_WINDOW = timedelta(hours=24)
 
 # ---------------------------------------------------------------- config
 
-def load_config(vault_root: Path, config_path: Path | None = None) -> dict:
-    cfg = json.loads(json.dumps(DEFAULT_CONFIG))  # deep copy
+def load_config(vault_root: Path, config_path: Path | None = None) -> VaultCfg:
+    cfg: VaultCfg = json.loads(json.dumps(DEFAULT_CONFIG))  # deep copy typed
     path = Path(config_path) if config_path else Path(vault_root) / "convert_config.json"
     if path.exists():
         user = json.loads(path.read_text(encoding="utf-8"))
         for section, values in user.items():
-            if isinstance(values, dict) and isinstance(cfg.get(section), dict):
-                cfg[section].update(values)
+            if isinstance(values, dict) and isinstance(cfg.get(section), dict):  # type: ignore
+                cfg[section].update(values)  # type: ignore
             else:
-                cfg[section] = values
+                cfg[section] = values  # type: ignore
     return cfg
 
 
@@ -148,9 +188,11 @@ def resolve_created(meta_created: datetime | None, path: Path) -> datetime | Non
 def convert_txt(path: Path) -> str:
     try:
         from markitdown import MarkItDown
-        return MarkItDown().convert(str(path)).text_content
-    except ImportError:
-        return Path(path).read_text(encoding="utf-8", errors="replace")
+    except ImportError as e:
+        raise RuntimeError(
+            "markitdown not found: pip install markitdown — required for .txt conversion"
+        ) from e
+    return MarkItDown().convert(str(path)).text_content
 
 
 def convert_html(path: Path) -> str:
@@ -213,7 +255,7 @@ def convert_msg(path: Path):
 
 
 def dispatch_convert(path: Path, client: docling_convert.DoclingClient,
-                     cfg: dict, routing_ext: str | None = None):
+                     cfg: VaultCfg, routing_ext: str | None = None):
     """Convert one file per the routing table.
     Returns (markdown, (meta_title, meta_created), attachments, converter_name).
     Raises on converter failure (caller records it; no cross-library retry)."""
@@ -221,20 +263,43 @@ def dispatch_convert(path: Path, client: docling_convert.DoclingClient,
     kind = ROUTING.get(ext)
     if kind is None:
         raise ValueError(f"unsupported extension: {ext}")
-    if kind == "docling":
-        pdf_cfg = {"split_threshold": cfg["pdf"]["split_threshold"],
-                   "chunk_pages": cfg["pdf"]["chunk_pages"]}
-        return (docling_convert.convert(path, client, pdf_cfg),
-                extract_metadata(path), [], "docling")
-    if kind == "pandoc":
-        return convert_html(path), extract_metadata(path), [], "pandoc"
-    if kind == "markitdown":
-        return convert_txt(path), (None, None), [], "markitdown"
-    if kind == "email":
+
+    # Single dispatch map replaces repeated if/switch chain (baseline smell fix)
+    def _onenote():
+        if not HAS_ONENOTE:
+            raise RuntimeError("onenote_conversion module not available; check .NET SDK 8.0+")
+        with tempfile.TemporaryDirectory(prefix="onenote_disp_") as tmp:
+            out = Path(tmp)
+            written = onenote_conversion.convert_onenote_file(path, out, path.parent, client, cfg)
+            if not written:
+                raise RuntimeError("onenote conversion produced no pages")
+            combined = "\n\n---\n\n".join(p.read_text(encoding="utf-8") for p in written if p.suffix == ".md")
+            return combined, extract_metadata(path), [], "onenote"
+
+    def _docling():
+        pdf_cfg = {"split_threshold": cfg["pdf"]["split_threshold"], "chunk_pages": cfg["pdf"]["chunk_pages"]}
+        return (docling_convert.convert(path, client, pdf_cfg), extract_metadata(path), [], "docling")
+
+    def _email():
         md, meta, atts = convert_eml(path)
         return md, meta, atts, "email"
-    md, meta, atts = convert_msg(path)
-    return md, meta, atts, "msg"
+
+    def _msg():
+        md, meta, atts = convert_msg(path)
+        return md, meta, atts, "msg"
+
+    handlers = {
+        "onenote": _onenote,
+        "docling": _docling,
+        "pandoc": lambda: (convert_html(path), extract_metadata(path), [], "pandoc"),
+        "markitdown": lambda: (convert_txt(path), (None, None), [], "markitdown"),
+        "email": _email,
+        "msg": _msg,
+    }
+    try:
+        return handlers[kind]()  # type: ignore
+    except KeyError:
+        raise ValueError(f"unsupported kind: {kind}") from None
 
 
 # -------------------------------------------------------------- pipeline
@@ -261,6 +326,49 @@ def _file_hash(path: Path) -> str | None:
     return h.hexdigest()
 
 
+def _is_duplicate(seen: dict[str, str], file_hash: str | None, rel: str, report: dict) -> bool:
+    """Check hash dedup; if duplicate, record report and return True."""
+    if file_hash is not None and file_hash in seen:
+        report["files"][rel] = {"status": "duplicate", "duplicate_of": seen[file_hash], "hash": file_hash}
+        return True
+    if file_hash is not None:
+        seen[file_hash] = rel
+    return False
+
+
+def _resolve_canonical_link(att_hash: str, canonical: str, md_by_hash: dict[str, str], rel_by_hash: dict[str, str]) -> str:
+    """Hide Message Chain for attachment canonical link resolution."""
+    if att_hash in md_by_hash:
+        return md_by_hash[att_hash]
+    if "#" in canonical:
+        for h, rel in rel_by_hash.items():
+            if rel == canonical and h in md_by_hash:
+                return md_by_hash[h]
+        return md_by_hash.get(att_hash, str(Path(canonical.split("#")[0]).with_suffix(".md").as_posix()))
+    return str(Path(canonical.split("#")[0]).with_suffix(".md").as_posix())
+
+
+def _handle_onenote_file(src: Path, rel: str, out_root: Path, raw_root: Path, client, cfg: VaultCfg,
+                         seen: dict[str, str], report: dict, onenote_written: list[tuple[str, Path]]) -> bool:
+    """Orchestrate one OneNote artifact; returns True if handled (report already set)."""
+    if not HAS_ONENOTE:
+        report["files"][rel] = {"status": "failed", "error": ".NET SDK 8.0+ required for OneNote conversion: winget install Microsoft.DotNet.SDK.8"}
+        return True
+    file_hash = _file_hash(src)
+    if _is_duplicate(seen, file_hash, rel, report):
+        return True
+    try:
+        written = onenote_conversion.convert_onenote_file(src, out_root, raw_root, client, cfg)
+        md_pages = [p for p in written if p.suffix == ".md"]
+        for p in md_pages:
+            onenote_written.append((rel, p))
+        # Initial report: hebrew fields will be updated after dictionary + fix_text (§7/§12)
+        report["files"][rel] = {"status": "converted", "converter": "onenote", "pages": len(md_pages), "hebrew_fixed": False, "ambiguous": []}
+    except Exception as e:  # noqa: BLE001
+        report["files"][rel] = {"status": "failed", "error": str(e)[:500]}
+    return True
+
+
 def run(vault_root: Path, force: bool = False,
         config_path: Path | None = None) -> dict:
     vault_root = Path(vault_root)
@@ -278,10 +386,26 @@ def run(vault_root: Path, force: bool = False,
     all_files = sorted(p for p in raw_root.rglob("*") if p.is_file())
     report: dict = {"files": {}}
 
+    # Notebook dirs: if a dir contains .onetoc2, its inner .one files are part of that notebook
+    # and will be handled when processing the .onetoc2 itself - skip them individually.
+    notebook_dirs = {p.parent for p in all_files if p.suffix.lower() == ".onetoc2"}
+    onenote_inner = set()
+    if notebook_dirs:
+        for p in all_files:
+            if p.suffix.lower() == ".one":
+                for d in notebook_dirs:
+                    try:
+                        p.relative_to(d)
+                        onenote_inner.add(p)
+                        break
+                    except ValueError:
+                        continue
+
     seen: dict[str, str] = {}  # hash -> canonical rel posix
     _att_md_by_hash: dict[str, str] = {}  # attachment hash -> md relative link
     _att_rel_by_hash: dict[str, str] = {}  # attachment hash -> canonical att_rel
     todo, results = [], {}
+    onenote_written: list[tuple[str, Path]] = []  # (src_rel, page_path) for post-hoc Hebrew fix (§7)
     for src in all_files:
         rel = src.relative_to(raw_root).as_posix()
         ext = src.suffix.lower()
@@ -289,13 +413,17 @@ def run(vault_root: Path, force: bool = False,
             report["files"][rel] = {"status": "skipped",
                                     "reason": f"unsupported extension {ext}"}
             continue
-        # Content-hash deduplication (before skip/force)
+        if src in onenote_inner:
+            report["files"][rel] = {"status": "skipped", "reason": "part of notebook dir (handled via .onetoc2)"}
+            continue
+        # OneNote offline: multi-page, headless via OfficeIMO - handle immediately, not via todo batch
+        if ext in ONENOTE_EXTS:
+            _handle_onenote_file(src, rel, out_root, raw_root, client, cfg, seen, report, onenote_written)
+            continue
+        # Content-hash deduplication (before skip/force) - extracted helper
         file_hash = _file_hash(src)
-        if file_hash is not None:
-            if file_hash in seen:
-                report["files"][rel] = {"status": "duplicate", "duplicate_of": seen[file_hash], "hash": file_hash}
-                continue
-            seen[file_hash] = rel
+        if _is_duplicate(seen, file_hash, rel, report):
+            continue
         dst = _out_path(raw_root, out_root, src)
         if should_skip(src, dst, force):
             report["files"][rel] = {"status": "skipped", "reason": "up to date"}
@@ -332,6 +460,36 @@ def run(vault_root: Path, force: bool = False,
 
     good_texts = [r["md"] for r in results.values() if "md" in r]
     dictionary = hebrew_fix.build_dictionary(good_texts, dict_path)
+
+    # §7: OneNote pages also run through hebrew_fix.fix_text (same as txt/msg/pandoc-html).
+    # Fix each page file in place and aggregate per-source report (§12).
+    if onenote_written:
+        from collections import defaultdict
+        onenote_fix_by_src: dict[str, dict] = defaultdict(lambda: {"fixed_any": False, "ambiguous_all": []})
+        for src_rel, page_path in onenote_written:
+            try:
+                content = page_path.read_text(encoding="utf-8")
+                # Split frontmatter (---\n...\n---\n) from body to avoid fixing YAML keys
+                body = content
+                fm = ""
+                if content.startswith("---\n"):
+                    end = content.find("\n---\n", 4)
+                    if end != -1:
+                        fm = content[: end + 5]
+                        body = content[end + 5 :]
+                fixed_body, fr = hebrew_fix.fix_text(body, dictionary, margin=margin)
+                if fixed_body != body:
+                    page_path.write_text(fm + fixed_body, encoding="utf-8")
+                agg = onenote_fix_by_src[src_rel]
+                if fr.get("hebrew_fixed"):
+                    agg["fixed_any"] = True
+                agg["ambiguous_all"].extend(fr.get("ambiguous", []))
+            except OSError:
+                pass
+        for src_rel, agg in onenote_fix_by_src.items():
+            if src_rel in report["files"]:
+                report["files"][src_rel]["hebrew_fixed"] = agg["fixed_any"]
+                report["files"][src_rel]["ambiguous"] = agg["ambiguous_all"]
 
     convert_batch(pass2, use_workers=True)
 
@@ -387,21 +545,7 @@ def run(vault_root: Path, force: bool = False,
                         "duplicate_of": canonical,
                         "hash": att_hash,
                     }
-                    # Link to canonical markdown
-                    if att_hash in _att_md_by_hash:
-                        link_target = _att_md_by_hash[att_hash]
-                    elif "#" in canonical and canonical in _att_rel_by_hash.values():
-                        # fallback lookup via canonical rel -> md
-                        # reverse lookup
-                        for h, rel in _att_rel_by_hash.items():
-                            if rel == canonical and h in _att_md_by_hash:
-                                link_target = _att_md_by_hash[h]
-                                break
-                        else:
-                            link_target = _att_md_by_hash.get(att_hash, str(Path(canonical.split("#")[0]).with_suffix(".md").as_posix()))
-                    else:
-                        # raw file canonical: mirrored .md path
-                        link_target = str(Path(canonical.split("#")[0]).with_suffix(".md").as_posix())
+                    link_target = _resolve_canonical_link(att_hash, canonical, _att_md_by_hash, _att_rel_by_hash)
                     converted_links.append(f"- [{att_name}]({link_target}) (duplicate of {canonical})")
                     continue
 
