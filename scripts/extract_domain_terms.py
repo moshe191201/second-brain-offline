@@ -39,20 +39,18 @@ except ImportError:
     sys.exit(1)
 
 # Ensure scripts/ is on path for sibling imports (needed when imported via tests)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_scripts_dir = os.path.dirname(os.path.abspath(__file__))
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
 
 import hebrew_yap_stemmer as _hys  # noqa: E402 — needed for _strip_hb_suffix
 
-# YAP — hard dependency (do not silently fall back)
-try:
-    from hebrew_yap_stemmer import _find_yap_exe as _yap_find  # noqa: F401
-    _yap_find()
-except FileNotFoundError as _e:
-    print(f"ERROR: YAP binary missing — {_e}", file=sys.stderr)
-    sys.exit(1)
-
+# YAP — hard dependency, checked lazily in scan_corpus() so that importing
+# this module for pure-logic tests (classify_token / RAW_WORD_RE) does not
+# require the binary.  Import symbols without probing.
 from hebrew_yap_stemmer import root_keys as _hb_root_keys  # noqa: E402
 from hebrew_yap_stemmer import analyze_tokens as _hb_analyze  # noqa: E402
+from hebrew_yap_stemmer import _find_yap_exe as _yap_find  # noqa: E402 — for runtime check
 
 from hot_words import _ENGLISH_STOP_WORDS, _HB_STOP_WORDS  # noqa: E402
 
@@ -67,13 +65,17 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-HEBREW_RANGE = "֐-׿"
+# Narrow Hebrew range to א-ת (U+05D0..U+05EA) — covers all letters + final
+# forms (ךםןףץ) while excluding cantillation/punctuation in 0590..05FF that
+# would add noise via RAW_WORD_RE.  Original plan used ֐-׿; we tighten here.
+HEBREW_RANGE = "א-ת"
 HEBREW_CHAR_RE = re.compile(f"[{HEBREW_RANGE}]")
 
 # Extraction: keeps optional hyphen so ה-API stays one token.
 # Single-char proclitic + hyphen + English (ה-API) must be kept, so allow
-# 1-char prefix before hyphen as alternative. Include digits for K8s etc.
-RAW_WORD_RE = re.compile(rf"(?:[A-Za-z0-9{HEBREW_RANGE}]{{2,}}(?:-[A-Za-z0-9{HEBREW_RANGE}]{{1,}})?|[A-Za-z0-9{HEBREW_RANGE}]-[A-Za-z0-9{HEBREW_RANGE}]{{1,}})")
+# 1-char prefix before hyphen as alternative. Include digits/underscore for
+# K8s, snake_case etc.
+RAW_WORD_RE = re.compile(rf"(?:[A-Za-z0-9_{HEBREW_RANGE}]{{2,}}(?:-[A-Za-z0-9_{HEBREW_RANGE}]{{1,}})?|[A-Za-z0-9_{HEBREW_RANGE}]-[A-Za-z0-9_{HEBREW_RANGE}]{{1,}})")
 
 # Proclitic letters that can attach to English stems
 PROCLITICS = set("הלבמושכ")
@@ -263,6 +265,12 @@ def scan_corpus(corpus_dir: Path):
 
         # Batch YAP for Hebrew
         if he_surfaces:
+            # Fail-fast on missing YAP only when Hebrew content actually present
+            try:
+                _yap_find()
+            except FileNotFoundError as _e:
+                print(f"ERROR: YAP binary missing — {_e}", file=sys.stderr)
+                sys.exit(1)
             try:
                 pairs = _hb_analyze(he_surfaces)
                 lemma_by_surface: dict[str, str] = {}
@@ -730,18 +738,31 @@ def main():
         "bigram": len(scan["bigram_counts"]),
         "trigram": len(scan["trigram_counts"]),
     }
+    # Report schema aligns with plan: input_dir, files, total_chars,
+    # total_tokens, unique_terms, ngram_counts, warnings, errors + extras
     report = {
         "input_dir": scan["input_dir"],
+        "files": scan["file_count"],
         "file_count": scan["file_count"],
         "total_chars": scan["total_chars"],
+        "total_tokens": sum(scan["unigram_counts"].values()),
         "unique_terms": len(scan["unigram_counts"]),
         "ngram_counts": ngram_counts,
         "top_n": args.top_n,
         "min_count": args.min_count,
+        "min_count_bi": args.min_count_bi,
+        "min_count_tri": args.min_count_tri,
         "ngrams": sorted(n_vals),
         "scored_count": len(scored),
         "warnings": [],
+        "errors": [],
+        "sklearn_version": None,
     }
+    try:
+        import sklearn
+        report["sklearn_version"] = sklearn.__version__
+    except ImportError:
+        pass
     if ngram_counts["trigram"] < 10:
         report["warnings"].append(f"only {ngram_counts['trigram']} trigrams — corpus may be small")
     with open(output_dir / "report.json", "w", encoding="utf-8") as f:
