@@ -86,6 +86,39 @@ class TestNgramCounting(unittest.TestCase):
             scan = scan_corpus(corpus)
             self.assertIn("finetuning lora", scan["bigram_counts"])
 
+    def test_bigram_not_bridging_stopword(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            corpus = Path(tmp)
+            (corpus / "a.md").write_text("api the model\napi the model\n", encoding="utf-8")
+            scan = scan_corpus(corpus)
+            self.assertNotIn("api model", scan["bigram_counts"],
+                             "bigram should not bridge across stopword 'the'")
+            # Adjacent without stopword should count
+            (corpus / "b.md").write_text("api model api model", encoding="utf-8")
+            scan2 = scan_corpus(corpus)
+            self.assertIn("api model", scan2["bigram_counts"])
+
+    def test_ngram_doc_freq(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            corpus = Path(tmp)
+            (corpus / "a.md").write_text("Finetuning LoRA Finetuning LoRA", encoding="utf-8")
+            (corpus / "b.md").write_text("Finetuning LoRA other", encoding="utf-8")
+            scan = scan_corpus(corpus)
+            self.assertGreater(scan["bigram_doc_freq"].get("finetuning lora", 0), 1)
+            scored = score_terms(scan, top_n=20)
+            # scored bigram should have doc_freq >0
+            bg = next((r for r in scored if r["term"] == "finetuning lora"), None)
+            self.assertIsNotNone(bg)
+            self.assertGreater(bg["doc_freq"], 1)
+
+    def test_k8s_counted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            corpus = Path(tmp)
+            (corpus / "a.md").write_text("K8s K8s הK8s ל-K8s K8s", encoding="utf-8")
+            scan = scan_corpus(corpus)
+            self.assertIn("k8s", scan["unigram_counts"])
+            self.assertGreaterEqual(scan["unigram_counts"]["k8s"], 4)
+
 
 if __name__ == "__main__":
     unittest.main()

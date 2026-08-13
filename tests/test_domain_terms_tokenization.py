@@ -72,6 +72,12 @@ class TestRawWordRe(unittest.TestCase):
     def test_hyphen_kept(self):
         self.assertIn("ה-API", RAW_WORD_RE.findall("ה-API"))
 
+    def test_digits_k8s(self):
+        toks = RAW_WORD_RE.findall("K8s הK8s ל-K8s")
+        self.assertIn("K8s", toks)
+        self.assertIn("הK8s", toks)
+        self.assertIn("ל-K8s", toks)
+
 
 class TestNormalizeEn(unittest.TestCase):
     def test_lower(self):

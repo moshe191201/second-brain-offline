@@ -41,6 +41,8 @@ except ImportError:
 # Ensure scripts/ is on path for sibling imports (needed when imported via tests)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import hebrew_yap_stemmer as _hys  # noqa: E402 — needed for _strip_hb_suffix
+
 # YAP — hard dependency (do not silently fall back)
 try:
     from hebrew_yap_stemmer import _find_yap_exe as _yap_find  # noqa: F401
@@ -70,8 +72,8 @@ HEBREW_CHAR_RE = re.compile(f"[{HEBREW_RANGE}]")
 
 # Extraction: keeps optional hyphen so ה-API stays one token.
 # Single-char proclitic + hyphen + English (ה-API) must be kept, so allow
-# 1-char prefix before hyphen as alternative.
-RAW_WORD_RE = re.compile(rf"(?:[A-Za-z{HEBREW_RANGE}]{{2,}}(?:-[A-Za-z{HEBREW_RANGE}]{{1,}})?|[A-Za-z{HEBREW_RANGE}]-[A-Za-z{HEBREW_RANGE}]{{1,}})")
+# 1-char prefix before hyphen as alternative. Include digits for K8s etc.
+RAW_WORD_RE = re.compile(rf"(?:[A-Za-z0-9{HEBREW_RANGE}]{{2,}}(?:-[A-Za-z0-9{HEBREW_RANGE}]{{1,}})?|[A-Za-z0-9{HEBREW_RANGE}]-[A-Za-z0-9{HEBREW_RANGE}]{{1,}})")
 
 # Proclitic letters that can attach to English stems
 PROCLITICS = set("הלבמושכ")
@@ -177,8 +179,9 @@ def scan_corpus(corpus_dir: Path):
 
     Returns dict with:
       unigram_counts, bigram_counts, trigram_counts, variant_map,
-      he_prefix_map, doc_freq, doc_terms, file_count, total_chars,
-      input_dir
+      he_prefix_map, doc_freq, bigram_doc_freq, trigram_doc_freq,
+      doc_terms, doc_term_counts, doc_names, backtick_terms, file_count,
+      total_chars, input_dir
     """
     md_files = sorted(corpus_dir.rglob("*.md"))
     if not md_files:
@@ -191,101 +194,80 @@ def scan_corpus(corpus_dir: Path):
     variant_map: dict[str, Counter] = defaultdict(Counter)
     he_prefix_map: dict[str, Counter] = defaultdict(Counter)
     doc_freq: Counter = Counter()
-    doc_terms: list[set[str]] = []  # per-doc normalized unigram sets for TF-IDF
+    bigram_doc_freq: Counter = Counter()
+    trigram_doc_freq: Counter = Counter()
+    doc_terms: list[set[str]] = []
+    doc_term_counts: list[Counter] = []
     doc_names: list[str] = []
-    # For code-word backtick detection
     backtick_terms: set[str] = set()
 
     total_chars = 0
-    # Collect Hebrew surfaces for batched YAP
-    # We process per-file to keep variant_map accurate, but YAP batch is per-file too
     for md_file in md_files:
         text = md_file.read_text(encoding="utf-8")
         body = _clean_body(_strip_frontmatter(text))
         total_chars += len(body)
 
-        # Detect terms inside backticks for code-word signal
         bt_raw = re.findall(r"`([^`]+)`", body)
         bt_norms: set[str] = set()
         for bt in bt_raw:
-            for w in re.findall(r"[A-Za-z]{2,}", bt):
+            for w in re.findall(r"[A-Za-z0-9]{2,}", bt):
                 bt_norms.add(w.lower())
 
         raw_tokens = RAW_WORD_RE.findall(body)
         if not raw_tokens:
             doc_terms.append(set())
+            doc_term_counts.append(Counter())
             doc_names.append(str(md_file.relative_to(corpus_dir)))
             continue
 
-        # Classify and normalize in order
-        normalized_stream: list[str] = []
-        norm_langs: list[str] = []  # parallel lang for each normalized token
+        # Build full sequence with None sentinel for stopwords (prevents bridging)
+        full_stream: list[str | None] = []
+        # Temporary buffers for Hebrew placeholder resolution
         he_surfaces: list[str] = []
-        he_positions: list[int] = []  # index in normalized_stream where he will go
-
-        # First pass: handle en/mixed immediately, collect he
-        # We need to emit in order, so track placeholder for he
-        temp_stream: list[str | None] = []
-        temp_langs: list[str | None] = []
+        he_positions: list[int] = []
         he_surface_by_pos: dict[int, str] = {}
-
+        # First pass: fill full_stream with norms or None, collect Hebrew
         for tok in raw_tokens:
             cls = classify_token(tok)
             if cls == "en":
                 norm = normalize_en(tok)
                 if norm in _ENGLISH_STOP_WORDS or len(norm) <= 1 or norm.isdigit():
-                    continue
-                temp_stream.append(norm)
-                temp_langs.append("en")
-                variant_map[norm][tok] += 1
+                    full_stream.append(None)
+                else:
+                    full_stream.append(norm)
+                    variant_map[norm][tok] += 1
             elif cls == "mixed":
                 norm, prefix = normalize_mixed(tok)
-                # If prefix stripped, norm is English stem; else norm is lowercased surface
-                # Still check stopwords on the English side only if stripped
                 if prefix:
                     if norm in _ENGLISH_STOP_WORDS or len(norm) <= 1:
-                        continue
-                    temp_stream.append(norm)
-                    temp_langs.append("mixed")
-                    variant_map[norm][tok] += 1
-                    he_prefix_map[norm][prefix] += 1
+                        full_stream.append(None)
+                    else:
+                        full_stream.append(norm)
+                        variant_map[norm][tok] += 1
+                        he_prefix_map[norm][prefix] += 1
                 else:
-                    # Non-proclitic mixed: keep surface lowercased, treat as mixed
                     if len(norm) <= 1:
-                        continue
-                    temp_stream.append(norm)
-                    temp_langs.append("mixed")
-                    variant_map[norm][tok] += 1
+                        full_stream.append(None)
+                    else:
+                        full_stream.append(norm)
+                        variant_map[norm][tok] += 1
             else:  # he
                 if tok in _HB_STOP_WORDS or len(tok) <= 1:
-                    continue
-                # Placeholder — resolve via YAP batch
-                pos = len(temp_stream)
-                temp_stream.append(None)  # type: ignore
-                temp_langs.append(None)  # type: ignore
-                he_surfaces.append(tok)
-                he_positions.append(pos)
-                he_surface_by_pos[pos] = tok
+                    full_stream.append(None)
+                else:
+                    pos = len(full_stream)
+                    full_stream.append(None)  # placeholder
+                    he_surfaces.append(tok)
+                    he_positions.append(pos)
+                    he_surface_by_pos[pos] = tok
 
-        # Batch YAP for Hebrew in this file
+        # Batch YAP for Hebrew
         if he_surfaces:
             try:
-                # Map surface -> normalized root key via YAP
-                # Use root_keys for grouping but also keep lemma mapping
                 pairs = _hb_analyze(he_surfaces)
-                # pairs is (original, lemma); map original index
                 lemma_by_surface: dict[str, str] = {}
                 for orig, lemma in pairs:
                     lemma_by_surface[orig] = lemma
-                # Also compute root_keys for all surfaces
-                keys = _hb_root_keys(he_surfaces)
-                # root_keys returns set, need per-surface mapping.
-                # Recompute per-surface via same logic as root_keys but per token
-                # For correctness, compute per-token root key
-                # We'll approximate: for each surface, get its lemma then apply skeleton
-                # Reuse _hb_root_keys internals by calling per token via single batch already done,
-                # but root_keys collapses — so recompute skeleton per lemma
-                import hebrew_yap_stemmer as _hys
                 per_surface_norm: dict[str, str] = {}
                 for surf in he_surfaces:
                     lemma = lemma_by_surface.get(surf, surf)
@@ -300,43 +282,57 @@ def scan_corpus(corpus_dir: Path):
                     surf = he_surface_by_pos[pos]
                     norm = per_surface_norm.get(surf, surf)
                     if norm in _HB_STOP_WORDS or len(norm) <= 1:
-                        temp_stream[pos] = ""  # mark for removal
-                        continue
-                    temp_stream[pos] = norm
-                    temp_langs[pos] = "he"
-                    variant_map[norm][surf] += 1
+                        full_stream[pos] = None
+                    else:
+                        full_stream[pos] = norm
+                        variant_map[norm][surf] += 1
             except Exception as e:
                 print(f"[WARN] YAP failed for file {md_file}: {e}", file=sys.stderr)
-                # Fall back to surface as normalized
                 for pos in he_positions:
                     surf = he_surface_by_pos[pos]
-                    temp_stream[pos] = surf
-                    temp_langs[pos] = "he"
+                    full_stream[pos] = surf
                     variant_map[surf][surf] += 1
 
-        # Remove placeholders that were stopwords
-        normalized_stream = [t for t in temp_stream if t]  # type: ignore
-        norm_langs = [l for t, l in zip(temp_stream, temp_langs) if t]  # type: ignore
+        # Derive normalized_stream (without Nones) for unigram counting
+        normalized_stream = [t for t in full_stream if t is not None]
 
-        # Update unigram counts and doc freq
+        # Update unigram counts and doc structures
         seen_in_doc: set[str] = set()
+        doc_counter: Counter = Counter()
         for norm in normalized_stream:
             unigram_counts[norm] += 1
+            doc_counter[norm] += 1
             seen_in_doc.add(norm)
             if norm in bt_norms:
                 backtick_terms.add(norm)
         for norm in seen_in_doc:
             doc_freq[norm] += 1
         doc_terms.append(seen_in_doc)
+        doc_term_counts.append(doc_counter)
         doc_names.append(str(md_file.relative_to(corpus_dir)))
 
-        # N-grams from normalized stream (skip windows with stopwords — already filtered)
-        for i in range(len(normalized_stream) - 1):
-            bg = f"{normalized_stream[i]} {normalized_stream[i+1]}"
+        # N-grams from full_stream — skip windows containing None (stopword gap)
+        seen_bigrams: set[str] = set()
+        for i in range(len(full_stream) - 1):
+            a, b = full_stream[i], full_stream[i + 1]
+            if a is None or b is None:
+                continue
+            bg = f"{a} {b}"
             bigram_counts[bg] += 1
-        for i in range(len(normalized_stream) - 2):
-            tg = f"{normalized_stream[i]} {normalized_stream[i+1]} {normalized_stream[i+2]}"
+            seen_bigrams.add(bg)
+        for bg in seen_bigrams:
+            bigram_doc_freq[bg] += 1
+
+        seen_trigrams: set[str] = set()
+        for i in range(len(full_stream) - 2):
+            a, b, c = full_stream[i], full_stream[i + 1], full_stream[i + 2]
+            if a is None or b is None or c is None:
+                continue
+            tg = f"{a} {b} {c}"
             trigram_counts[tg] += 1
+            seen_trigrams.add(tg)
+        for tg in seen_trigrams:
+            trigram_doc_freq[tg] += 1
 
     return {
         "unigram_counts": unigram_counts,
@@ -345,7 +341,10 @@ def scan_corpus(corpus_dir: Path):
         "variant_map": variant_map,
         "he_prefix_map": he_prefix_map,
         "doc_freq": doc_freq,
+        "bigram_doc_freq": bigram_doc_freq,
+        "trigram_doc_freq": trigram_doc_freq,
         "doc_terms": doc_terms,
+        "doc_term_counts": doc_term_counts,
         "doc_names": doc_names,
         "backtick_terms": backtick_terms,
         "file_count": len(md_files),
@@ -414,6 +413,8 @@ def score_terms(scan: dict, top_n: int = 1000, min_count_uni: int = 3,
     variant_map = scan["variant_map"]
     he_prefix_map = scan["he_prefix_map"]
     doc_freq = scan["doc_freq"]
+    bigram_doc_freq = scan.get("bigram_doc_freq", Counter())
+    trigram_doc_freq = scan.get("trigram_doc_freq", Counter())
 
     # Unigrams
     for term, cnt in scan["unigram_counts"].items():
@@ -422,8 +423,6 @@ def score_terms(scan: dict, top_n: int = 1000, min_count_uni: int = 3,
         lang = _detect_lang(term, variant_map, he_prefix_map)
         eff_lang = "en" if lang == "mixed" else lang
         base = _base_freq(term, eff_lang)
-        # For he/mixed that are English stems via mixed, base is en; for pure he, base is he
-        # If term is Hebrew root key but wordfreq returns floor, still keep it
         ratio = cnt / base
         log_ratio = math.log10(ratio) if ratio > 0 else 0
         scored.append({
@@ -443,7 +442,7 @@ def score_terms(scan: dict, top_n: int = 1000, min_count_uni: int = 3,
         log_ratio = math.log10(ratio) if ratio > 0 else 0
         scored.append({
             "term": term, "n": 2, "lang": _ngram_lang(term, variant_map, he_prefix_map),
-            "corpus_count": cnt, "doc_freq": 0, "base_freq": base,
+            "corpus_count": cnt, "doc_freq": bigram_doc_freq.get(term, 0), "base_freq": base,
             "ratio": ratio, "log_ratio": log_ratio,
         })
 
@@ -458,7 +457,7 @@ def score_terms(scan: dict, top_n: int = 1000, min_count_uni: int = 3,
         log_ratio = math.log10(ratio) if ratio > 0 else 0
         scored.append({
             "term": term, "n": 3, "lang": _ngram_lang(term, variant_map, he_prefix_map),
-            "corpus_count": cnt, "doc_freq": 0, "base_freq": base,
+            "corpus_count": cnt, "doc_freq": trigram_doc_freq.get(term, 0), "base_freq": base,
             "ratio": ratio, "log_ratio": log_ratio,
         })
 
@@ -476,10 +475,10 @@ def write_terms_csv(scored: list[dict], variant_map, path: Path):
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         for i, row in enumerate(scored, 1):
-            variants = ";".join(sorted(variant_map.get(row["term"].split()[0], {}).keys())[:5]) if row["n"] == 1 else ""
-            # For n>1, variant summary is less meaningful — leave blank
             if row["n"] == 1:
                 variants = ";".join(sorted(variant_map.get(row["term"], {}).keys()))
+            else:
+                variants = ""
             w.writerow({
                 "rank": i, "term": row["term"], "n": row["n"], "lang": row["lang"],
                 "corpus_count": row["corpus_count"], "doc_freq": row["doc_freq"],
@@ -589,7 +588,6 @@ def write_code_words(scored: list[dict], variant_map, backtick_terms: set[str], 
 def write_subdomain_keywords(scored: list[dict], scan: dict, path: Path):
     top_terms = [r["term"] for r in scored if r["n"] == 1][:500]
     if not top_terms or len(scan["doc_terms"]) < 2:
-        # Fallback: simple doc_freq buckets
         result = {
             "num_clusters": 0,
             "clusters": [],
@@ -601,7 +599,6 @@ def write_subdomain_keywords(scored: list[dict], scan: dict, path: Path):
         return
 
     if not _SKLEARN_AVAILABLE:
-        # Quartile fallback
         result = {
             "num_clusters": 0,
             "clusters": [],
@@ -613,25 +610,21 @@ def write_subdomain_keywords(scored: list[dict], scan: dict, path: Path):
         return
 
     from sklearn.feature_extraction.text import TfidfTransformer
-    import numpy as np
+    import numpy as _np
 
-    # Build doc-term count matrix for top_terms
     n_docs = len(scan["doc_terms"])
     n_terms = len(top_terms)
     term_idx = {t: i for i, t in enumerate(top_terms)}
-    import numpy as _np
     mat = _np.zeros((n_docs, n_terms), dtype=float)
-    for doc_i, doc_set in enumerate(scan["doc_terms"]):
-        # Count occurrences per doc: approximate via scan unigram counts distributed?
-        # We have doc_terms as sets, so use binary presence; TF-IDF will still separate
-        for t in doc_set:
+    doc_term_counts = scan.get("doc_term_counts", [Counter() for _ in range(n_docs)])
+    for doc_i, counter in enumerate(doc_term_counts):
+        for t, c in counter.items():
             if t in term_idx:
-                mat[doc_i, term_idx[t]] = 1.0
+                mat[doc_i, term_idx[t]] = float(c)
 
     transformer = TfidfTransformer()
     tfidf = transformer.fit_transform(mat).toarray()
 
-    # Deterministic KMeans
     from sklearn.cluster import KMeans
     n_clusters = min(5, n_docs)
     if n_clusters < 2:
@@ -642,7 +635,6 @@ def write_subdomain_keywords(scored: list[dict], scan: dict, path: Path):
     clusters = []
     for cid in range(n_clusters):
         doc_indices = [i for i, l in enumerate(labels) if l == cid]
-        # Top keywords for cluster: highest mean tf-idf
         mean_tfidf = tfidf[doc_indices].mean(axis=0) if doc_indices else _np.zeros(n_terms)
         top_idx = _np.argsort(mean_tfidf)[::-1][:8]
         keywords = [top_terms[i] for i in top_idx if mean_tfidf[i] > 0][:8]
@@ -676,7 +668,10 @@ def main():
     parser.add_argument("--output-dir", default=None, help="Output dir (default: <vault>/data/domain_terms)")
     parser.add_argument("--top-n", type=int, default=1000)
     parser.add_argument("--min-count", type=int, default=3, help="Unigram min count (bigram/trigram use 2)")
+    parser.add_argument("--min-count-bi", type=int, default=2, help="Bigram min count")
+    parser.add_argument("--min-count-tri", type=int, default=2, help="Trigram min count")
     parser.add_argument("--ngrams", default="1,2,3", help="Comma-separated n values, e.g. 1,2")
+    parser.add_argument("--quota", default=None, help="Per-n quota e.g. 700,200,100 for unigram,bigram,trigram")
     args = parser.parse_args()
 
     vault_root = Path(args.vault_root).resolve()
@@ -696,9 +691,27 @@ def main():
         sys.exit(1)
 
     print("\n=== Scoring ===")
-    scored = score_terms(scan, top_n=args.top_n, min_count_uni=args.min_count)
+    scored = score_terms(scan, top_n=args.top_n * 3, min_count_uni=args.min_count,
+                         min_count_bi=args.min_count_bi, min_count_tri=args.min_count_tri)
     # Filter by requested n
     scored = [r for r in scored if r["n"] in n_vals]
+    # Apply per-n quota if requested (e.g. --quota 700,200,100)
+    if args.quota:
+        try:
+            quotas = [int(x.strip()) for x in args.quota.split(",")]
+            quota_map = {1: quotas[0] if len(quotas) > 0 else args.top_n,
+                         2: quotas[1] if len(quotas) > 1 else args.top_n,
+                         3: quotas[2] if len(quotas) > 2 else args.top_n}
+            by_n: dict[int, list[dict]] = {1: [], 2: [], 3: []}
+            for r in scored:
+                by_n[r["n"]].append(r)
+            quota_scored = []
+            for n in sorted(n_vals):
+                quota_scored.extend(by_n[n][:quota_map.get(n, args.top_n)])
+            quota_scored.sort(key=lambda x: (-x["log_ratio"], -x["corpus_count"], x["term"]))
+            scored = quota_scored[:args.top_n]
+        except Exception as e:
+            print(f"[WARN] invalid --quota {args.quota}: {e}", file=sys.stderr)
     scored = scored[:args.top_n]
     print(f"Scored {len(scored)} terms (top {min(len(scored), 10)} shown):")
     for i, r in enumerate(scored[:10], 1):
