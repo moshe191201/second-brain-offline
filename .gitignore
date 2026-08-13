@@ -20,8 +20,9 @@ site/
 
 **/graphify-out/.graphify_*
 
-# Offline docling models — selectable-text bundle (506 MB). Re-vendor when available:
-# deps/docling-models/ carries the vendored bundle; transfer once through the gap
+# Offline docling models — selectable-text bundle (506 MB). Re-vendor via:
+# python scripts/download_docling_models.py && python scripts/package_docling_offline_bundle.py
+# Transfer once through the gap; distribute inside via NFS/S3.
 /deps/docling-models/
 /deps/tessdata/
 
@@ -29,3 +30,8 @@ site/
 scripts/OneNoteOffline/bin/
 scripts/OneNoteOffline/obj/
 scripts/OneNoteOffline/publish/
+
+# Waived derived artifacts (not part of vault 3-layer model)
+/raw_md/
+data/domain_terms/
+data/hebrew_dict.json
