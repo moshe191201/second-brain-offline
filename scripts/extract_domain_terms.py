@@ -203,8 +203,16 @@ def scan_corpus(corpus_dir: Path):
     doc_names: list[str] = []
     backtick_terms: set[str] = set()
 
+    # Phase 1: collect per-doc streams with Hebrew placeholders and global heb set
     total_chars = 0
+    per_doc: list[dict] = []
+    all_he_surfaces: set[str] = set()
+
     for md_file in md_files:
+        try:
+            rel = str(md_file.relative_to(corpus_dir))
+        except ValueError:
+            rel = md_file.name
         text = md_file.read_text(encoding="utf-8")
         body = _clean_body(_strip_frontmatter(text))
         total_chars += len(body)
@@ -212,23 +220,19 @@ def scan_corpus(corpus_dir: Path):
         bt_raw = re.findall(r"`([^`]+)`", body)
         bt_norms: set[str] = set()
         for bt in bt_raw:
-            for w in re.findall(r"[A-Za-z0-9]{2,}", bt):
+            for w in re.findall(r"[A-Za-z0-9_]{2,}", bt):
                 bt_norms.add(w.lower())
 
         raw_tokens = RAW_WORD_RE.findall(body)
         if not raw_tokens:
-            doc_terms.append(set())
-            doc_term_counts.append(Counter())
-            doc_names.append(str(md_file.relative_to(corpus_dir)))
+            per_doc.append({"full_stream": [], "bt_norms": bt_norms, "rel": rel,
+                            "he_surfaces": [], "he_positions": [], "he_by_pos": {}})
             continue
 
-        # Build full sequence with None sentinel for stopwords (prevents bridging)
         full_stream: list[str | None] = []
-        # Temporary buffers for Hebrew placeholder resolution
         he_surfaces: list[str] = []
         he_positions: list[int] = []
-        he_surface_by_pos: dict[int, str] = {}
-        # First pass: fill full_stream with norms or None, collect Hebrew
+        he_by_pos: dict[int, str] = {}
         for tok in raw_tokens:
             cls = classify_token(tok)
             if cls == "en":
@@ -261,50 +265,67 @@ def scan_corpus(corpus_dir: Path):
                     full_stream.append(None)  # placeholder
                     he_surfaces.append(tok)
                     he_positions.append(pos)
-                    he_surface_by_pos[pos] = tok
+                    he_by_pos[pos] = tok
+                    all_he_surfaces.add(tok)
 
-        # Batch YAP for Hebrew
-        if he_surfaces:
-            # Fail-fast on missing YAP only when Hebrew content actually present
-            try:
-                _yap_find()
-            except FileNotFoundError as _e:
-                print(f"ERROR: YAP binary missing — {_e}", file=sys.stderr)
-                sys.exit(1)
-            try:
-                pairs = _hb_analyze(he_surfaces)
-                lemma_by_surface: dict[str, str] = {}
-                for orig, lemma in pairs:
-                    lemma_by_surface[orig] = lemma
-                per_surface_norm: dict[str, str] = {}
-                for surf in he_surfaces:
-                    lemma = lemma_by_surface.get(surf, surf)
-                    reduced = _hys._strip_hb_suffix(lemma)
-                    weak = {"א", "ה", "ו", "י"}
-                    strong = [c for c in reduced if "א" <= c <= "ת" and c not in weak]
-                    if len(strong) >= 3:
-                        per_surface_norm[surf] = "".join(strong[:3])
-                    else:
-                        per_surface_norm[surf] = reduced
-                for pos in he_positions:
-                    surf = he_surface_by_pos[pos]
-                    norm = per_surface_norm.get(surf, surf)
-                    if norm in _HB_STOP_WORDS or len(norm) <= 1:
-                        full_stream[pos] = None
-                    else:
-                        full_stream[pos] = norm
-                        variant_map[norm][surf] += 1
-            except Exception as e:
-                print(f"[WARN] YAP failed for file {md_file}: {e}", file=sys.stderr)
-                for pos in he_positions:
-                    surf = he_surface_by_pos[pos]
-                    full_stream[pos] = surf
-                    variant_map[surf][surf] += 1
+        per_doc.append({"full_stream": full_stream, "bt_norms": bt_norms, "rel": rel,
+                        "he_surfaces": he_surfaces, "he_positions": he_positions, "he_by_pos": he_by_pos})
 
-        # Derive normalized_stream (without Nones) for unigram counting
+    # Phase 2: global YAP batch (1 subprocess for all Hebrew surfaces, ~6k docs → 1 call)
+    global_per_surface_norm: dict[str, str] = {}
+    if all_he_surfaces:
+        try:
+            _yap_find()
+        except FileNotFoundError as _e:
+            print(f"ERROR: YAP binary missing — {_e}", file=sys.stderr)
+            sys.exit(1)
+        unique_list = list(all_he_surfaces)
+        # Chunk to avoid timeout on huge corpora (500 tokens per chunk, 30s timeout each)
+        chunk_size = 500
+        pairs_all: list[tuple[str, str]] = []
+        try:
+            for i in range(0, len(unique_list), chunk_size):
+                chunk = unique_list[i:i + chunk_size]
+                pairs_all.extend(_hb_analyze(chunk))
+        except Exception as e:
+            print(f"[WARN] YAP global batch failed: {e}", file=sys.stderr)
+            pairs_all = [(w, w) for w in unique_list]
+        lemma_by_surface: dict[str, str] = {}
+        for orig, lemma in pairs_all:
+            # keep first occurrence for deduped list
+            if orig not in lemma_by_surface:
+                lemma_by_surface[orig] = lemma
+        # also cover any surface not returned (fallback)
+        for surf in unique_list:
+            lemma = lemma_by_surface.get(surf, surf)
+            reduced = _hys._strip_hb_suffix(lemma)
+            weak = {"א", "ה", "ו", "י"}
+            strong = [c for c in reduced if "א" <= c <= "ת" and c not in weak]
+            if len(strong) >= 3:
+                global_per_surface_norm[surf] = "".join(strong[:3])
+            else:
+                global_per_surface_norm[surf] = reduced
+
+    # Phase 3: resolve Hebrew placeholders and count n-grams per doc
+    for doc in per_doc:
+        full_stream = doc["full_stream"]
+        bt_norms = doc["bt_norms"]
+        rel = doc["rel"]
+        he_positions = doc["he_positions"]
+        he_by_pos = doc["he_by_pos"]
+        if he_positions:
+            # Use global mapping; if global batch had no entry (e.g. YAP failed), fallback to surface
+            for pos in he_positions:
+                surf = he_by_pos[pos]
+                norm = global_per_surface_norm.get(surf, surf)
+                if norm in _HB_STOP_WORDS or len(norm) <= 1:
+                    full_stream[pos] = None
+                else:
+                    full_stream[pos] = norm
+                    variant_map[norm][surf] += 1
+        # Fallback if YAP warned per surface: already handled via global_per_surface_norm
+
         normalized_stream = [t for t in full_stream if t is not None]
-
-        # Update unigram counts and doc structures
         seen_in_doc: set[str] = set()
         doc_counter: Counter = Counter()
         for norm in normalized_stream:
@@ -317,9 +338,8 @@ def scan_corpus(corpus_dir: Path):
             doc_freq[norm] += 1
         doc_terms.append(seen_in_doc)
         doc_term_counts.append(doc_counter)
-        doc_names.append(str(md_file.relative_to(corpus_dir)))
+        doc_names.append(rel)
 
-        # N-grams from full_stream — skip windows containing None (stopword gap)
         seen_bigrams: set[str] = set()
         for i in range(len(full_stream) - 1):
             a, b = full_stream[i], full_stream[i + 1]
