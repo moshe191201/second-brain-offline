@@ -59,12 +59,13 @@ ROUTING = {**{e: "docling" for e in DOCLING_EXTS},
            **{e: "onenote" for e in ONENOTE_EXTS}}
 
 
-class DoclingCfg(TypedDict):
+class DoclingCfg(TypedDict, total=False):
     url: str
     workers: int
     timeout: float
     retry_delay: float
     poll_interval: float
+    health_interval: float
 
 
 class PdfCfg(TypedDict):
@@ -85,12 +86,26 @@ class VaultCfg(TypedDict):
 
 DEFAULT_CONFIG: VaultCfg = {
     "docling": {"url": "http://localhost:5001", "workers": 1,
-                "timeout": 300, "retry_delay": 1.0, "poll_interval": 2.0},
+                "timeout": 300, "retry_delay": 1.0, "poll_interval": 2.0,
+                "health_interval": 30},
     "pdf": {"split_threshold": 100, "chunk_pages": 50},
     "hebrew": {"dict_path": "data/hebrew_dict.json", "ambiguity_margin": 2.0},
 }
 
 RECENT_WINDOW = timedelta(hours=24)
+
+
+def _format_down_error(exc, pending):
+    header = str(exc) if exc is not None else "docling server is unreachable"
+    if not pending:
+        return f"{header} - no pending documents tracked"
+    lines = [f"{header}", f"  {len(pending)} document(s) sent but not returned:"]
+    for pp in pending[:50]:
+        lines.append(f"    - {pp.as_posix()}")
+    if len(pending) > 50:
+        lines.append(f"    ... and {len(pending) - 50} more")
+    lines.append("  The file that crashed the server is among the pending set.")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------- config
@@ -380,8 +395,11 @@ def run(vault_root: Path, force: bool = False,
     client = docling_convert.DoclingClient(
         cfg["docling"]["url"], timeout=cfg["docling"]["timeout"],
         retry_delay=cfg["docling"].get("retry_delay", 1.0))
+    health_interval = float(cfg["docling"].get("health_interval", 30))
+    monitor = client.start_health_monitor(interval=health_interval)
     margin = cfg["hebrew"]["ambiguity_margin"]
     dict_path = vault_root / cfg["hebrew"]["dict_path"]
+    _pending_before_exit = None
 
     all_files = sorted(p for p in raw_root.rglob("*") if p.is_file())
     report: dict = {"files": {}}
@@ -431,11 +449,16 @@ def run(vault_root: Path, force: bool = False,
         todo.append(src)
 
     def convert_one(src, routing_ext: str | None = None):
+        if client.is_down():
+            raise docling_convert.DoclingServerDown(f"docling server {client.base_url} is unreachable - aborting batch", client.pending_snapshot())
         try:
             md, meta, atts, converter = dispatch_convert(src, client, cfg, routing_ext=routing_ext)
-            return src, {"md": md, "meta": meta, "attachments": atts,
-                         "converter": converter}
-        except Exception as e:  # noqa: BLE001 - recorded, never retried elsewhere
+            return src, {"md": md, "meta": meta, "attachments": atts, "converter": converter}
+        except docling_convert.DoclingServerDown:
+            raise
+        except Exception as e:
+            if client.is_down():
+                raise docling_convert.DoclingServerDown(f"docling server {client.base_url} went down during conversion of {src.name}", client.pending_snapshot()) from e
             return src, {"error": str(e)}
 
     workers = max(1, int(cfg["docling"].get("workers", 1)))
@@ -456,42 +479,50 @@ def run(vault_root: Path, force: bool = False,
                 for src, res in pool.map(convert_one, files):
                     results[src] = res
 
-    convert_batch(pass1, use_workers=False)
+    try:
+        convert_batch(pass1, use_workers=False)
 
-    good_texts = [r["md"] for r in results.values() if "md" in r]
-    dictionary = hebrew_fix.build_dictionary(good_texts, dict_path)
+        good_texts = [r["md"] for r in results.values() if "md" in r]
+        dictionary = hebrew_fix.build_dictionary(good_texts, dict_path)
 
-    # §7: OneNote pages also run through hebrew_fix.fix_text (same as txt/msg/pandoc-html).
-    # Fix each page file in place and aggregate per-source report (§12).
-    if onenote_written:
-        from collections import defaultdict
-        onenote_fix_by_src: dict[str, dict] = defaultdict(lambda: {"fixed_any": False, "ambiguous_all": []})
-        for src_rel, page_path in onenote_written:
-            try:
-                content = page_path.read_text(encoding="utf-8")
-                # Split frontmatter (---\n...\n---\n) from body to avoid fixing YAML keys
-                body = content
-                fm = ""
-                if content.startswith("---\n"):
-                    end = content.find("\n---\n", 4)
-                    if end != -1:
-                        fm = content[: end + 5]
-                        body = content[end + 5 :]
-                fixed_body, fr = hebrew_fix.fix_text(body, dictionary, margin=margin)
-                if fixed_body != body:
-                    page_path.write_text(fm + fixed_body, encoding="utf-8")
-                agg = onenote_fix_by_src[src_rel]
-                if fr.get("hebrew_fixed"):
-                    agg["fixed_any"] = True
-                agg["ambiguous_all"].extend(fr.get("ambiguous", []))
-            except OSError:
-                pass
-        for src_rel, agg in onenote_fix_by_src.items():
-            if src_rel in report["files"]:
-                report["files"][src_rel]["hebrew_fixed"] = agg["fixed_any"]
-                report["files"][src_rel]["ambiguous"] = agg["ambiguous_all"]
+        if onenote_written:
+            from collections import defaultdict
+            onenote_fix_by_src: dict[str, dict] = defaultdict(lambda: {"fixed_any": False, "ambiguous_all": []})
+            for src_rel, page_path in onenote_written:
+                try:
+                    content = page_path.read_text(encoding="utf-8")
+                    body = content
+                    fm = ""
+                    if content.startswith("---\n"):
+                        end = content.find("\n---\n", 4)
+                        if end != -1:
+                            fm = content[: end + 5]
+                            body = content[end + 5 :]
+                    fixed_body, fr = hebrew_fix.fix_text(body, dictionary, margin=margin)
+                    if fixed_body != body:
+                        page_path.write_text(fm + fixed_body, encoding="utf-8")
+                    agg = onenote_fix_by_src[src_rel]
+                    if fr.get("hebrew_fixed"):
+                        agg["fixed_any"] = True
+                    agg["ambiguous_all"].extend(fr.get("ambiguous", []))
+                except OSError:
+                    pass
+            for src_rel, agg in onenote_fix_by_src.items():
+                if src_rel in report["files"]:
+                    report["files"][src_rel]["hebrew_fixed"] = agg["fixed_any"]
+                    report["files"][src_rel]["ambiguous"] = agg["ambiguous_all"]
 
-    convert_batch(pass2, use_workers=True)
+        convert_batch(pass2, use_workers=True)
+    except docling_convert.DoclingServerDown as exc:
+        _pending_before_exit = list(exc.pending) if exc.pending else client.pending_snapshot()
+        raise docling_convert.DoclingServerDown(_format_down_error(exc, _pending_before_exit), _pending_before_exit) from exc
+    finally:
+        monitor.stop()
+        if _pending_before_exit is None and client.is_down():
+            pending = client.pending_snapshot()
+            if not pending:
+                pending = [p for p in todo if p not in results]
+            raise docling_convert.DoclingServerDown(_format_down_error(None, pending), pending)
 
     def write_output(src: Path, res: dict, dst: Path | None = None,
                      rel_key: str | None = None,
