@@ -219,7 +219,23 @@ def convert_onenote_file(
                         sidecar_md = assets_dst_dir / f"{Path(asset_name).stem}.md"
                         if not sidecar_md.exists():
                             md_att, _, _, _ = _dispatch(src_asset, client, cfg, routing_ext=ext)
-                            sidecar_md.write_text(md_att, encoding="utf-8")
+                            # Wrap attachment sidecar with frontmatter including attachment_of link to parent page
+                            try:
+                                import convert_to_md as _cvt2
+                                # Try to apply hebrew fix if dictionary available via convert_to_md context
+                                # but skip if not - keep converted text as-is with frontmatter
+                                rel_page = dst.relative_to(out_root).as_posix() if dst else ""
+                                fm_att = _cvt2.build_frontmatter(
+                                    Path(asset_name).stem or "attachment",
+                                    None,
+                                    asset_name,
+                                    ext,
+                                    False,
+                                    attachment_of=rel_page,
+                                )
+                                sidecar_md.write_text(fm_att + "\n" + md_att, encoding="utf-8")
+                            except Exception:  # noqa: BLE001
+                                sidecar_md.write_text(md_att, encoding="utf-8")
                         rel_sidecar = sidecar_md.relative_to(out_root).as_posix()
                         attachment_links.append(f"- [{asset.get('originalName') or asset_name}]({rel_sidecar}) (converted)")
                     except Exception as e:  # noqa: BLE001

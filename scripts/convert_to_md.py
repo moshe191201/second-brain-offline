@@ -130,7 +130,9 @@ def load_config(vault_root: Path, config_path: Path | None = None) -> VaultCfg:
 
 def build_frontmatter(title: str, created: datetime | None,
                       original_file: str, original_ext: str,
-                      hebrew_fixed: bool) -> str:
+                      hebrew_fixed: bool,
+                      original_paths: list[str] | None = None,
+                      attachment_of: str | None = None) -> str:
     meta = {"title": title}
     if created is not None:
         if created.tzinfo is None:
@@ -140,6 +142,10 @@ def build_frontmatter(title: str, created: datetime | None,
             meta["created"] = created
     meta["original_file"] = original_file
     meta["original_ext"] = original_ext
+    if original_paths and len(original_paths) > 1:
+        meta["original_paths"] = sorted(original_paths)
+    if attachment_of:
+        meta["attachment_of"] = attachment_of
     if hebrew_fixed:
         meta["hebrew_fixed"] = True
     return "---\n" + yaml.safe_dump(meta, allow_unicode=True, sort_keys=False) + "---\n"
@@ -366,11 +372,59 @@ def _resolve_canonical_link(att_hash: str, canonical: str, md_by_hash: dict[str,
     return str(Path(canonical.split("#")[0]).with_suffix(".md").as_posix())
 
 
+def _patch_frontmatter_original_paths(md_path: Path, original_paths: list[str]) -> None:
+    """Ensure md_path's YAML frontmatter contains original_paths (sorted)."""
+    if len(original_paths) <= 1:
+        return
+    sorted_paths = sorted(original_paths)
+    try:
+        text = md_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    if not text.startswith("---\n"):
+        return
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return
+    fm_raw = text[4:end]
+    body = text[end + 5 :]
+    try:
+        fm_data = yaml.safe_load(fm_raw) or {}
+    except Exception:  # noqa: BLE001
+        return
+    if fm_data.get("original_paths") == sorted_paths:
+        return
+    fm_data["original_paths"] = sorted_paths
+    # Preserve key order: ensure original_paths appears after original_ext if present.
+    # yaml.safe_dump respects insertion order; move original_paths before hebrew_fixed if needed
+    if "hebrew_fixed" in fm_data:
+        hf = fm_data.pop("hebrew_fixed")
+        fm_data["hebrew_fixed"] = hf
+    new_fm = "---\n" + yaml.safe_dump(fm_data, allow_unicode=True, sort_keys=False) + "---\n"
+    try:
+        md_path.write_text(new_fm + body, encoding="utf-8")
+    except OSError:
+        pass
+
+
 def _handle_onenote_file(src: Path, rel: str, out_root: Path, raw_root: Path, client, cfg: VaultCfg,
-                         seen: dict[str, str], report: dict, onenote_written: list[tuple[str, Path]]) -> bool:
+                         seen: dict[str, str], report: dict, onenote_written: list[tuple[str, Path]],
+                         duplicate_groups: dict[str, list[str]] | None = None) -> bool:
     """Orchestrate one OneNote artifact; returns True if handled (report already set)."""
     file_hash = _file_hash(src)
-    if _is_duplicate(seen, file_hash, rel, report):
+    if file_hash is not None and file_hash in seen:
+        canonical = seen[file_hash]
+        report["files"][rel] = {"status": "duplicate", "duplicate_of": canonical, "hash": file_hash}
+        if duplicate_groups is not None:
+            duplicate_groups.setdefault(canonical, [canonical])
+            if rel not in duplicate_groups[canonical]:
+                duplicate_groups[canonical].append(rel)
+        return True
+    if file_hash is not None:
+        seen[file_hash] = rel
+        if duplicate_groups is not None:
+            duplicate_groups.setdefault(rel, [rel])
+    elif _is_duplicate(seen, file_hash, rel, report):
         return True
     try:
         written = onenote_conversion.convert_onenote_file(src, out_root, raw_root, client, cfg)
@@ -420,6 +474,7 @@ def run(vault_root: Path, force: bool = False,
                         continue
 
     seen: dict[str, str] = {}  # hash -> canonical rel posix
+    duplicate_groups: dict[str, list[str]] = {}  # canonical rel -> all rels sharing same hash (raw files only)
     _att_md_by_hash: dict[str, str] = {}  # attachment hash -> md relative link
     _att_rel_by_hash: dict[str, str] = {}  # attachment hash -> canonical att_rel
     todo, results = [], {}
@@ -436,11 +491,21 @@ def run(vault_root: Path, force: bool = False,
             continue
         # OneNote offline: multi-page, headless via OfficeIMO - handle immediately, not via todo batch
         if ext in ONENOTE_EXTS:
-            _handle_onenote_file(src, rel, out_root, raw_root, client, cfg, seen, report, onenote_written)
+            _handle_onenote_file(src, rel, out_root, raw_root, client, cfg, seen, report, onenote_written, duplicate_groups)
             continue
-        # Content-hash deduplication (before skip/force) - extracted helper
+        # Content-hash deduplication (before skip/force)
         file_hash = _file_hash(src)
-        if _is_duplicate(seen, file_hash, rel, report):
+        if file_hash is not None and file_hash in seen:
+            canonical = seen[file_hash]
+            report["files"][rel] = {"status": "duplicate", "duplicate_of": canonical, "hash": file_hash}
+            duplicate_groups.setdefault(canonical, [canonical])
+            if rel not in duplicate_groups[canonical]:
+                duplicate_groups[canonical].append(rel)
+            continue
+        if file_hash is not None:
+            seen[file_hash] = rel
+            duplicate_groups.setdefault(rel, [rel])
+        elif _is_duplicate(seen, file_hash, rel, report):
             continue
         dst = _out_path(raw_root, out_root, src)
         if should_skip(src, dst, force):
@@ -526,7 +591,9 @@ def run(vault_root: Path, force: bool = False,
 
     def write_output(src: Path, res: dict, dst: Path | None = None,
                      rel_key: str | None = None,
-                     original_name: str | None = None):
+                     original_name: str | None = None,
+                     original_paths: list[str] | None = None,
+                     attachment_of: str | None = None):
         dst = dst or _out_path(raw_root, out_root, src)
         rel = rel_key or src.relative_to(raw_root).as_posix()
         if "error" in res:
@@ -539,7 +606,9 @@ def run(vault_root: Path, force: bool = False,
         title = resolve_title(meta_title, fixed, Path(shown))
         created = resolve_created(meta_created, src)
         fm = build_frontmatter(title, created, shown, Path(shown).suffix.lower(),
-                               fix_report["hebrew_fixed"])
+                               fix_report["hebrew_fixed"],
+                               original_paths=original_paths,
+                               attachment_of=attachment_of)
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_text(fm + "\n" + fixed, encoding="utf-8")
         report["files"][rel] = {
@@ -550,7 +619,9 @@ def run(vault_root: Path, force: bool = False,
 
     for src in todo:
         res = results[src]
-        fixed = write_output(src, res)
+        rel = src.relative_to(raw_root).as_posix()
+        op = duplicate_groups.get(rel)
+        fixed = write_output(src, res, original_paths=op)
         if fixed is None:
             continue
         # Email attachments: convert into <stem>_attachments/ and link them.
@@ -558,6 +629,7 @@ def run(vault_root: Path, force: bool = False,
         if res.get("attachments"):
             converted_links = []
             seen_att_dsts: set[str] = set()
+            parent_md_rel = _out_path(raw_root, out_root, src).relative_to(out_root).as_posix()
             for att_name, att_bytes in res["attachments"]:
                 att_rel_base = f"{src.relative_to(raw_root).as_posix()}#{att_name}"
                 att_rel = att_rel_base
@@ -606,7 +678,8 @@ def run(vault_root: Path, force: bool = False,
                                                      "error": att_result["error"]}
                     else:
                         write_output(tmp_path, att_result, dst=att_dst,
-                                     rel_key=att_rel, original_name=att_name)
+                                     rel_key=att_rel, original_name=att_name,
+                                     attachment_of=parent_md_rel)
                         # Remember this attachment's hash so later attachments dedup against it
                         if att_hash not in seen:
                             seen[att_hash] = att_rel
@@ -623,6 +696,18 @@ def run(vault_root: Path, force: bool = False,
                 parent_dst = _out_path(raw_root, out_root, src)
                 with open(parent_dst, "a", encoding="utf-8") as fh:
                     fh.write("\n\n## Attachments\n" + "\n".join(converted_links) + "\n")
+
+    # Patch skipped canonicals that now have duplicates: ensure their md contains original_paths
+    for canonical_rel, all_paths in duplicate_groups.items():
+        if len(all_paths) <= 1:
+            continue
+        # canonical_rel is a raw file rel; skip synthetic att rels (# in name)
+        if "#" in canonical_rel:
+            continue
+        canonical_src = raw_root / canonical_rel
+        dst = _out_path(raw_root, out_root, canonical_src)
+        if dst.exists():
+            _patch_frontmatter_original_paths(dst, all_paths)
 
     report_path = out_root / "conversion_report.json"
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=1),
