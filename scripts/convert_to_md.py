@@ -10,11 +10,16 @@ Routing (one converter per extension, no cross-library retry):
     .txt                 -> markitdown (required - fail if missing)
     .msg                 -> extract_msg
     .eml                 -> stdlib email
+    .vsdx                -> vsdx (required - fail if missing: pip install vsdx)
+                          Headless, text-only: shapes + connectors -> markdown
+                          tables + Mermaid flowchart, no image rendering,
+                          no OneNote/COM, LLM without vision can understand.
+                          Only .vsdx; legacy binary .vsd is unsupported.
     .one .onepkg .onetoc2 -> OfficeIMO.OneNote offline parser (see onenote_conversion.py)
                           + docling/pandoc/markitdown for embedded attachments
                           Requires .NET SDK 8.0+ (once) to build scripts/OneNoteOffline;
                           published output is self-contained. No OneNote/COM needed.
-    everything else      -> skipped (incl. xlsx/csv per spec, reported not retried)
+    everything else      -> skipped (incl. xlsx/csv/vsd per spec, reported not retried)
 
 Two passes: textual formats first (they feed the persistent Hebrew
 dictionary), then PDFs (OCR output is checked against that dictionary but
@@ -44,18 +49,16 @@ from typing import TypedDict
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import docling_convert
 import hebrew_fix
-
-try:
-    import onenote_conversion
-    HAS_ONENOTE = True
-except ImportError:
-    HAS_ONENOTE = False
+import onenote_conversion
+import vsdx_conversion
 
 DOCLING_EXTS = {".pdf", ".docx", ".pptx"}
 ONENOTE_EXTS = {".one", ".onepkg", ".onetoc2"}
+VSDX_EXTS = {".vsdx"}
 ROUTING = {**{e: "docling" for e in DOCLING_EXTS},
            ".txt": "markitdown", ".msg": "msg", ".eml": "email",
            ".html": "pandoc", ".htm": "pandoc",
+           ".vsdx": "vsdx",
            **{e: "onenote" for e in ONENOTE_EXTS}}
 
 
@@ -201,12 +204,8 @@ def resolve_created(meta_created: datetime | None, path: Path) -> datetime | Non
 # ------------------------------------------------------------ converters
 
 def convert_txt(path: Path) -> str:
-    try:
-        from markitdown import MarkItDown
-    except ImportError as e:
-        raise RuntimeError(
-            "markitdown not found: pip install markitdown — required for .txt conversion"
-        ) from e
+    from markitdown import MarkItDown
+
     return MarkItDown().convert(str(path)).text_content
 
 
@@ -269,6 +268,11 @@ def convert_msg(path: Path):
     return md, (msg.subject, created), attachments
 
 
+def convert_vsdx(path: Path) -> str:
+    """Convert .vsdx via vsdx_conversion (required)."""
+    return vsdx_conversion.convert_vsdx(path)
+
+
 def dispatch_convert(path: Path, client: docling_convert.DoclingClient,
                      cfg: VaultCfg, routing_ext: str | None = None):
     """Convert one file per the routing table.
@@ -281,8 +285,6 @@ def dispatch_convert(path: Path, client: docling_convert.DoclingClient,
 
     # Single dispatch map replaces repeated if/switch chain (baseline smell fix)
     def _onenote():
-        if not HAS_ONENOTE:
-            raise RuntimeError("onenote_conversion module not available; check .NET SDK 8.0+")
         with tempfile.TemporaryDirectory(prefix="onenote_disp_") as tmp:
             out = Path(tmp)
             written = onenote_conversion.convert_onenote_file(path, out, path.parent, client, cfg)
@@ -308,6 +310,7 @@ def dispatch_convert(path: Path, client: docling_convert.DoclingClient,
         "docling": _docling,
         "pandoc": lambda: (convert_html(path), extract_metadata(path), [], "pandoc"),
         "markitdown": lambda: (convert_txt(path), (None, None), [], "markitdown"),
+        "vsdx": lambda: (convert_vsdx(path), extract_metadata(path), [], "vsdx"),
         "email": _email,
         "msg": _msg,
     }
@@ -366,9 +369,6 @@ def _resolve_canonical_link(att_hash: str, canonical: str, md_by_hash: dict[str,
 def _handle_onenote_file(src: Path, rel: str, out_root: Path, raw_root: Path, client, cfg: VaultCfg,
                          seen: dict[str, str], report: dict, onenote_written: list[tuple[str, Path]]) -> bool:
     """Orchestrate one OneNote artifact; returns True if handled (report already set)."""
-    if not HAS_ONENOTE:
-        report["files"][rel] = {"status": "failed", "error": ".NET SDK 8.0+ required for OneNote conversion: winget install Microsoft.DotNet.SDK.8"}
-        return True
     file_hash = _file_hash(src)
     if _is_duplicate(seen, file_hash, rel, report):
         return True

@@ -8,8 +8,8 @@
 
 ## 1. Formats
 
-- **In scope:** `txt`, `msg`, `eml`, `docx`, `html`, `htm`, `pptx`, `pdf`
-- **Explicitly out of scope:** `xlsx`, `csv` (and any other extension → skipped, reported, not retried)
+- **In scope:** `txt`, `msg`, `eml`, `docx`, `html`, `htm`, `pptx`, `pdf`, `vsdx`
+- **Explicitly out of scope:** `xlsx`, `csv`, `vsd` (legacy binary Visio; only `vsdx` is supported) (and any other extension → skipped, reported, not retried)
 
 ## 2. Routing table (one converter per extension, no cross-library retry)
 
@@ -20,6 +20,7 @@
 | `txt` | `markitdown` (required — fail if missing) | |
 | `msg` | `extract_msg` (required) | builds `Subject:/From:/To:/Date:` header block + body (pattern from `worktree stages.py`) |
 | `eml` | stdlib `email` | same header block + body |
+| `vsdx` | `vsdx` (`pip install vsdx`, see `scripts/vsdx_conversion.py`) | **Headless, text-only**: shapes + connectors → markdown tables + Mermaid `flowchart TD`; no image rendering, no Visio/COM, no human clicking; LLM without vision can understand. Only `.vsdx`; `.vsd` is unsupported. |
 
 Failures are reported in `conversion_report.json`, never retried via another library.
 
