@@ -1177,7 +1177,16 @@ body.presentation-mode #slide-learnings .learnings-foot{ margin-top:16px; paddin
 </div>
 
 <script>
-const ids = ["slide-1","slide-2","slide-3","slide-15","slide-4","slide-5","slide-learnings","slide-5b","slide-6","slide-7","slide-8","slide-9","slide-5c","slide-10","slide-10b","slide-12","slide-14","slide-custom","slide-16","slide-17","cta"];
+// Derived from DOM — no hand-maintained shadow list. Custom order via data-order if needed.
+const _slides = [...document.querySelectorAll('.shell > .hero[id], .shell > .section[id]')].filter(el=>el.id);
+const _hasCustomOrder = _slides.some(el=>el.dataset.order !== undefined);
+const ids = (_hasCustomOrder
+  ? [..._slides].sort((a,b)=>{
+      const ao = a.dataset.order !== undefined ? Number(a.dataset.order) : Infinity;
+      const bo = b.dataset.order !== undefined ? Number(b.dataset.order) : Infinity;
+      return ao - bo;
+    })
+  : _slides).map(el=>el.id);
 // inject dividers once — guard against double-injection on hot-reload
 if(!document.querySelector('.page-divider')){
   (function injectDividers(){
@@ -1229,7 +1238,7 @@ function updateDots(){
   [...dots.children].forEach((el,i)=> el.classList.toggle('active', i===idx));
 }
 // init — presentation mode is default
-document.getElementById('presentBtn').textContent = 'יציאה ממצב מצגת';
+{ const _initBtn = document.getElementById('presentBtn'); if(_initBtn) _initBtn.textContent = 'יציאה ממצב מצגת'; }
 showPresent(0);
 const progress=document.getElementById('progress');
 addEventListener('scroll', ()=>{
