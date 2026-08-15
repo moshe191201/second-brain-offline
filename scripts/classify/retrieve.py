@@ -54,13 +54,13 @@ def call_embeddings(texts, base_url, api_key, model):
 def load_taxonomy(path: Path):
     txt = path.read_text(encoding="utf-8")
     subs = {}
-    for m in re.finditer(r"^\s{2}(\w+):\n", txt, flags=re.MULTILINE):
+    for m in re.finditer(r"^\s{2}([\w-]+):\n", txt, flags=re.MULTILINE):
         name = m.group(1)
         if name in ("subdomains", "version", "campaign"):
             continue
         block_start = m.end()
         # capture until next subdomain block or end
-        next_m = re.search(r"^\s{2}\w+:\n", txt[block_start:], flags=re.MULTILINE)
+        next_m = re.search(r"^\s{2}[\w-]+:\n", txt[block_start:], flags=re.MULTILINE)
         block = txt[block_start: block_start + (next_m.start() if next_m else 5000)]
         # Support text: "quoted", text: 'single', text: | multiline (first line)
         examples = re.findall(r'text:\s*"(.*?)"', block)

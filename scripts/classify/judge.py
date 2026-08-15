@@ -26,7 +26,7 @@ def load_yaml_simple(path: Path):
         return "", {}
     txt = path.read_text(encoding="utf-8")
     subs = {}
-    for m in re.finditer(r"^\s{2}(\w+):\n", txt, flags=re.MULTILINE):
+    for m in re.finditer(r"^\s{2}([\w-]+):\n", txt, flags=re.MULTILINE):
         name = m.group(1)
         if name in ("subdomains", "version", "campaign"):
             continue
@@ -37,7 +37,7 @@ def load_yaml_simple(path: Path):
     return txt, subs
 
 
-def build_prompt(chunk_text, taxonomy_subs, glossary_text, candidates, policy_text):
+def build_prompt(chunk_text, taxonomy_subs, glossary_text, candidates, policy_text, few_shot_per_topk=3):
     glossary_header = ""
     if glossary_text:
         glossary_header = "Domain knowledge (surface form → subdomain):\n" + glossary_text[:2000] + "\n\n"
@@ -46,7 +46,7 @@ def build_prompt(chunk_text, taxonomy_subs, glossary_text, candidates, policy_te
     for c in candidates:
         sub = taxonomy_subs.get(c, {})
         cand_defs += f"- {c}: {sub.get('definition','')}\n"
-        for ex in sub.get("examples", [])[:3]:
+        for ex in sub.get("examples", [])[:few_shot_per_topk]:
             cand_defs += f"  example: \"{ex[:200]}\"\n"
 
     system = (
@@ -140,7 +140,18 @@ def main():
         print(json.dumps(schema, indent=2))
         print("\n--- Example prompt preview (first candidate) ---")
         cand = allowed[:4]
-        sys_p, usr_p = build_prompt("Example doc body about HbA1c...", subs, gloss_text, cand, "")
+        few_shot = 3
+        _pol_path = Path(args.campaign) / "policy.yaml" if not Path(args.campaign).is_absolute() else Path(args.campaign) / "policy.yaml"
+        if not _pol_path.exists():
+            _pol_path = Path("src/second_brain_vault_framework/payload/templates/classification/policy.yaml")
+        try:
+            if _pol_path.exists():
+                _m = re.search(r"few_shot_per_topk:\s*(\d+)", _pol_path.read_text(encoding="utf-8"))
+                if _m:
+                    few_shot = int(_m.group(1))
+        except Exception:
+            pass
+        sys_p, usr_p = build_prompt("Example doc body about HbA1c...", subs, gloss_text, cand, "", few_shot)
         print(sys_p[:800])
         return 0
 
@@ -149,8 +160,21 @@ def main():
     model = os.environ.get("CLASSIFY_LLM_MODEL") or "minimax-m2.7"
 
     if not base_url:
-        print("judge: no CLASSIFY_LLM_BASE_URL / QMD_OPENAI_BASE_URL — dry-run only", file=sys.stderr)
-        return 0
+        print("judge: no CLASSIFY_LLM_BASE_URL / QMD_OPENAI_BASE_URL — failing closed (no LLM endpoint configured)", file=sys.stderr)
+        return 1
+
+    # few_shot_per_topk from policy.yaml (default 3)
+    few_shot_per_topk = 3
+    _policy_path_for_fewshot = Path(args.campaign) / "policy.yaml"
+    if not _policy_path_for_fewshot.exists():
+        _policy_path_for_fewshot = Path("src/second_brain_vault_framework/payload/templates/classification/policy.yaml")
+    try:
+        if _policy_path_for_fewshot.exists():
+            _mf = re.search(r"few_shot_per_topk:\s*(\d+)", _policy_path_for_fewshot.read_text(encoding="utf-8"))
+            if _mf:
+                few_shot_per_topk = int(_mf.group(1))
+    except Exception:
+        pass
 
     store_root = Path(args.store)
     docs = list(store_root.rglob("*.md"))
@@ -167,7 +191,7 @@ def main():
             body = parts[2] if len(parts) > 2 else text
         else:
             body = text
-        system, user = build_prompt(body, subs, gloss_text, cands, "")
+        system, user = build_prompt(body, subs, gloss_text, cands, "", few_shot_per_topk)
         try:
             out = call_llm(system, user, base_url, api_key, model, schema)
         except Exception as e:

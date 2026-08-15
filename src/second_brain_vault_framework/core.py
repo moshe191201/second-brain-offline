@@ -612,12 +612,61 @@ def _load_taxonomy_subdomains(campaign: Path, root: Path) -> set[str]:
     if txt is None:
         return set()
     subs = set()
-    for m in re.finditer(r"^\s{2}(\w+):\n", txt, flags=re.MULTILINE):
+    for m in re.finditer(r"^\s{2}([\w-]+):\n", txt, flags=re.MULTILINE):
         name = m.group(1)
         if name not in ("subdomains", "version", "campaign"):
             subs.add(name)
     return subs
 
+
+
+_TAXONOMY_RE = re.compile(r"^\s{2}([\w-]+):\n", re.MULTILINE)
+
+
+def _classification_file_version(path: Path) -> str:
+    """Extract ``version:`` from a YAML file, fallback to ``1``."""
+    try:
+        t = path.read_text(encoding="utf-8")
+        m = re.search(r"^version:\s*(\S+)", t, flags=re.MULTILINE)
+        if m:
+            return m.group(1).strip().strip('"').strip("'")
+    except Exception:
+        pass
+    return "1"
+
+
+def _resolve_campaign_file(campaign_resolved: Path, filename: str) -> Path:
+    """Resolve ``filename`` (taxonomy.yaml etc.) preferring the campaign dir."""
+    if campaign_resolved.is_dir():
+        pp = campaign_resolved / filename
+        if pp.exists():
+            return pp
+    else:
+        pp = campaign_resolved.parent / filename
+        if pp.exists():
+            return pp
+    return payload_root() / "templates" / "classification" / filename
+
+
+def _classification_policy_values(campaign_resolved: Path) -> tuple[int, str]:
+    """Read ``top_k`` and ``model_id`` from policy.yaml (campaign preferred)."""
+    policy_path = _resolve_campaign_file(campaign_resolved, "policy.yaml")
+    top_k = 4
+    model_id = "minimax-m2.7"
+    try:
+        if policy_path.exists():
+            t = policy_path.read_text(encoding="utf-8")
+            m = re.search(r"top_k:\s*(\d+)", t)
+            if m:
+                top_k = max(1, min(10, int(m.group(1))))
+            jm = re.search(r"judge:\s*\n((?:[ \t]+.*\n)*)", t)
+            block = jm.group(1) if jm else t
+            mm = re.search(r"model:\s*([^\s#\n]+)", block)
+            if mm:
+                model_id = mm.group(1).strip().strip('"').strip("'").rstrip(",")
+    except Exception:
+        pass
+    return top_k, model_id
 
 def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = False) -> int:
     """Closed-vocabulary validator: rejects primary/secondary not in taxonomy, patches frontmatter/ledger.
@@ -721,6 +770,10 @@ def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = Fal
                 fm["domains"] = [primary] + secondary
                 fm["doc_decision"] = primary
                 fm["decided_by"] = "model"
+                fm["doc_type"] = "classified"
+                _trust_map = {"SURE": "high", "NEEDS_HUMAN_VALIDATION": "needs_review", "I_GUESSED": "low"}
+                fm["trust"] = _trust_map.get(bucket, "needs_review")
+                fm["level"] = "1"
                 fm_lines = ["---"]
                 for k, v in fm.items():
                     if isinstance(v, list):
@@ -733,9 +786,14 @@ def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = Fal
                 new_text = "\n".join(fm_lines) + "\n\n" + body
                 tmp = sibling.with_suffix(sibling.suffix + ".tmp")
                 tmp.write_text(new_text, encoding="utf-8")
-                tmp.rename(sibling)
+                tmp.replace(sibling)
             if not dry_run:
                 ledger_path.parent.mkdir(parents=True, exist_ok=True)
+                # Audit trail: versions and model/top-k (SKILL.md promise)
+                tax_version = _classification_file_version(_resolve_campaign_file(campaign_resolved, "taxonomy.yaml"))
+                gloss_version = _classification_file_version(_resolve_campaign_file(campaign_resolved, "glossary.yaml"))
+                policy_version = _classification_file_version(_resolve_campaign_file(campaign_resolved, "policy.yaml"))
+                top_k_val, model_val = _classification_policy_values(campaign_resolved)
                 event = {
                     "doc_id": doc_id,
                     "stage": "classify",
@@ -746,6 +804,11 @@ def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = Fal
                     "confidence_bucket": bucket,
                     "method": "model",
                     "reasoning_brief": reasoning,
+                    "taxonomy_version": tax_version,
+                    "glossary_version": gloss_version,
+                    "policy_version": policy_version,
+                    "model_id": model_val,
+                    "top_k": top_k_val,
                     "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
                 }
                 with ledger_path.open("a", encoding="utf-8") as f:

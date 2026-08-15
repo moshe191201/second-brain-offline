@@ -46,7 +46,7 @@ def main():
     # Parse subdomain list for view rendering
     subs = []
     if tax_path.exists():
-        for m in re.finditer(r"^\s{2}(\w+):\n", tax_path.read_text(encoding="utf-8"), flags=re.MULTILINE):
+        for m in re.finditer(r"^\s{2}([\w-]+):\n", tax_path.read_text(encoding="utf-8"), flags=re.MULTILINE):
             n = m.group(1)
             if n not in ("subdomains", "version", "campaign"):
                 subs.append(n)
