@@ -1,7 +1,7 @@
 {
   "framework_version": "0.1.0",
   "vault_name": "Example",
-  "installed_at": "2026-08-15T12:53:57",
+  "installed_at": "2026-08-15T23:52:29",
   "manifest": {
     "framework_version": "0.1.0",
     "owned_paths": [
@@ -18,7 +18,18 @@
       "templates/classification/glossary.yaml",
       "templates/classification/policy.yaml",
       "templates/classification/questionnaire.md",
-      "templates/classification/label_studio/view.xml"
+      "templates/classification/label_studio/view.xml",
+      "templates/ingest-pipeline/01-assess/GUIDANCE.md",
+      "templates/ingest-pipeline/01-assess/QUESTIONS.md",
+      "templates/ingest-pipeline/02-filtering/QUESTIONS.md",
+      "templates/ingest-pipeline/03-translation/GUIDANCE.md",
+      "templates/ingest-pipeline/03-translation/QUESTIONS.md",
+      "templates/ingest-pipeline/04-classification/QUESTIONS.md",
+      "templates/ingest-pipeline/05-domain-model/QUESTIONS.md",
+      "templates/ingest-pipeline/06-success-criteria/QUESTIONS.md",
+      "templates/ingest-pipeline/README.md",
+      "templates/ingest-pipeline/domains.md",
+      "templates/ingest-pipeline/sources.md"
     ],
     "scaffold_only_paths": [
       "tests/VAULT_TESTS.md"
