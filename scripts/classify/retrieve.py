@@ -54,14 +54,21 @@ def call_embeddings(texts, base_url, api_key, model):
 def load_taxonomy(path: Path):
     txt = path.read_text(encoding="utf-8")
     subs = {}
-    for m in re.finditer(r"^\s{2}([\w-]+):\n", txt, flags=re.MULTILINE):
-        name = m.group(1)
-        if name in ("subdomains", "version", "campaign"):
-            continue
-        block_start = m.end()
-        # capture until next subdomain block or end
-        next_m = re.search(r"^\s{2}[\w-]+:\n", txt[block_start:], flags=re.MULTILINE)
-        block = txt[block_start: block_start + (next_m.start() if next_m else 5000)]
+    try:
+        from second_brain_vault_framework.core import _parse_taxonomy_blocks
+        blocks = _parse_taxonomy_blocks(txt)
+    except Exception:
+        _local_re = re.compile(r"^\s{2}([\w-]+):\s*(?:\n|$)", re.MULTILINE)
+        matches = list(_local_re.finditer(txt))
+        blocks = {}
+        for i, m in enumerate(matches):
+            name = m.group(1)
+            if name in ("subdomains", "version", "campaign"):
+                continue
+            start = m.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(txt)
+            blocks[name] = txt[start:end]
+    for name, block in blocks.items():
         # Support text: "quoted", text: 'single', text: | multiline (first line)
         examples = re.findall(r'text:\s*"(.*?)"', block)
         examples += re.findall(r"text:\s*'(.*?)'", block)

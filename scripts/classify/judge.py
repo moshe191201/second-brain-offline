@@ -20,17 +20,35 @@ BUCKETS = ["SURE", "NEEDS_HUMAN_VALIDATION", "I_GUESSED"]
 RELATIONS = ["none", "comparison", "relationship", "progression"]
 
 
-def load_yaml_simple(path: Path):
-    # minimal: return text + extract subdomains
-    if not path.exists():
-        return "", {}
-    txt = path.read_text(encoding="utf-8")
-    subs = {}
-    for m in re.finditer(r"^\s{2}([\w-]+):\n", txt, flags=re.MULTILINE):
+try:
+    from second_brain_vault_framework.core import _TAXONOMY_RE as _CORE_TAX_RE, _parse_taxonomy_blocks as _core_parse_blocks
+    _TAXONOMY_RE = _CORE_TAX_RE
+    _HAS_CORE = True
+except Exception:
+    _TAXONOMY_RE = re.compile(r"^\s{2}([\w-]+):\s*(?:\n|$)", re.MULTILINE)
+    _HAS_CORE = False
+
+
+def _local_parse_blocks(txt: str) -> dict[str, str]:
+    matches = list(_TAXONOMY_RE.finditer(txt))
+    blocks: dict[str, str] = {}
+    for i, m in enumerate(matches):
         name = m.group(1)
         if name in ("subdomains", "version", "campaign"):
             continue
-        block = txt[m.end(): m.end()+5000]
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(txt)
+        blocks[name] = txt[start:end]
+    return blocks
+
+
+def load_yaml_simple(path: Path):
+    if not path.exists():
+        return "", {}
+    txt = path.read_text(encoding="utf-8")
+    blocks = (_core_parse_blocks(txt) if _HAS_CORE else _local_parse_blocks(txt))
+    subs: dict = {}
+    for name, block in blocks.items():
         def_m = re.search(r"definition:\s*\"(.*?)\"", block, flags=re.DOTALL)
         examples = re.findall(r"text:\s*\"(.*?)\"", block)
         subs[name] = {"definition": def_m.group(1) if def_m else "", "examples": examples}
@@ -63,7 +81,7 @@ def build_prompt(chunk_text, taxonomy_subs, glossary_text, candidates, policy_te
 
 
 def build_schema(allowed_subdomains):
-    # reasoning_brief FIRST is enforced by order in properties (Python 3.7+ preserves)
+    # reasoning_brief listed first in properties so vLLM guided_json tends to emit it first; not a JSON Schema guarantee (L2).
     return {
         "type": "object",
         "properties": {

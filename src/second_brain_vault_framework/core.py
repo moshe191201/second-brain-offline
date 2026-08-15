@@ -581,46 +581,76 @@ def cmd_status(root: Path) -> int:
 
 
 def _load_taxonomy_subdomains(campaign: Path, root: Path) -> set[str]:
-    """Load allowed subdomains.
-
-    Strict: campaign/taxonomy.yaml must exist for real campaigns.
-    Fallback to payload template only when campaign file is genuinely absent (tests/check).
-    Callers that require a frozen campaign (cmd_classify) should check campaign file existence first.
-    """
-    # Campaign-resolved path is passed already resolved (root/campaign when relative)
-    txt = None
+    """Load allowed subdomains — strict, no payload fallback (H2 fail-closed)."""
+    cand: Path | None = None
     if campaign.is_absolute():
-        cand = campaign / "taxonomy.yaml" if campaign.is_dir() else campaign
-        # if campaign is taxonomy.yaml itself or dir containing it
-        if cand.is_dir():
-            cand = cand / "taxonomy.yaml"
-        if cand.exists():
-            txt = cand.read_text(encoding="utf-8")
-        elif (campaign / "taxonomy.yaml").exists():
-            txt = (campaign / "taxonomy.yaml").read_text(encoding="utf-8")
+        if campaign.is_dir():
+            cand = campaign / "taxonomy.yaml"
+        elif campaign.suffix in (".yaml", ".yml"):
+            cand = campaign
+        else:
+            cand = campaign / "taxonomy.yaml"
+        if cand is not None and not cand.exists() and (campaign / "taxonomy.yaml").exists():
+            cand = campaign / "taxonomy.yaml"
     else:
-        # campaign is vault-relative; caller should have resolved, but handle both
-        for p in [root / campaign / "taxonomy.yaml", campaign / "taxonomy.yaml", payload_root() / "templates" / "classification" / "taxonomy.yaml"]:
-            if p.exists():
-                txt = p.read_text(encoding="utf-8")
+        for q in [root / campaign / "taxonomy.yaml", root / campaign]:
+            if q.is_dir():
+                pp = q / "taxonomy.yaml"
+                if pp.exists():
+                    cand = pp
+                    break
+            elif q.exists() and q.suffix in (".yaml", ".yml"):
+                cand = q
                 break
-    # Fallback for tests: try payload directly if still none
-    if txt is None:
-        p = payload_root() / "templates" / "classification" / "taxonomy.yaml"
-        if p.exists():
-            txt = p.read_text(encoding="utf-8")
-    if txt is None:
+        if cand is None:
+            if campaign.exists() and campaign.suffix in (".yaml", ".yml"):
+                cand = campaign
+            elif (campaign / "taxonomy.yaml").exists():
+                cand = campaign / "taxonomy.yaml"
+    if cand is None or not cand.exists():
         return set()
-    subs = set()
-    for m in re.finditer(r"^\s{2}([\w-]+):\n", txt, flags=re.MULTILINE):
+    try:
+        txt = cand.read_text(encoding="utf-8")
+    except Exception:
+        return set()
+    return set(_parse_taxonomy_blocks(txt).keys())
+
+
+
+_TAXONOMY_RE = re.compile(r"^\s{2}([\w-]+):\s*(?:\n|$)", re.MULTILINE)
+
+
+def _parse_taxonomy_blocks(txt: str) -> dict[str, str]:
+    matches = list(_TAXONOMY_RE.finditer(txt))
+    blocks: dict[str, str] = {}
+    for i, m in enumerate(matches):
         name = m.group(1)
-        if name not in ("subdomains", "version", "campaign"):
-            subs.add(name)
-    return subs
+        if name in ("subdomains", "version", "campaign"):
+            continue
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(txt)
+        blocks[name] = txt[start:end]
+    return blocks
 
 
+def _yaml_escape_str(s: str) -> str:
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
 
-_TAXONOMY_RE = re.compile(r"^\s{2}([\w-]+):\n", re.MULTILINE)
+
+def _yaml_quote_str(s: str) -> str:
+    return f'"{_yaml_escape_str(s)}"'
+
+
+def _yaml_dump_scalar(v) -> str:
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, str):
+        return _yaml_quote_str(v)
+    return _yaml_quote_str(str(v))
 
 
 def _classification_file_version(path: Path) -> str:
@@ -675,19 +705,19 @@ def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = Fal
     taxonomy.yaml, and on success patches the store md frontmatter with domains/doc_decision
     and appends a ledger event. Pure stdlib — no LLM call.
     """
-    # Resolve campaign before taxonomy load (I3)
+    # Resolve campaign before taxonomy load — strict, no payload fallback (H2).
     campaign_resolved = (root / campaign) if not campaign.is_absolute() else campaign
     # Strict: real campaign must have its own taxonomy.yaml; fallback only for tests where campaign is dummy
     campaign_tax = campaign_resolved / "taxonomy.yaml" if campaign_resolved.is_dir() else campaign_resolved
     if campaign_resolved.is_dir() and not campaign_tax.exists():
-        # Allow fallback only when no store exists yet (tests) — otherwise fail closed (C5)
-        store_path_check = (root / store) if not store.is_absolute() else store
-        if store_path_check.exists() and list(store_path_check.rglob("*.judge.json")):
-            print(f"vault classify: no taxonomy found at {campaign_tax} — run questionnaire and freeze taxonomy first", file=sys.stderr)
-            return 1
+        print(f"vault classify: no taxonomy found at {campaign_tax} — run questionnaire and freeze taxonomy first", file=sys.stderr)
+        return 1
+    if not campaign_resolved.is_dir() and campaign_resolved.suffix not in (".yaml", ".yml") and not campaign_resolved.exists():
+        print(f"vault classify: campaign not found: {campaign_resolved}", file=sys.stderr)
+        return 1
     allowed = _load_taxonomy_subdomains(campaign_resolved if campaign_resolved.exists() else campaign, root)
     if not allowed:
-        print(f"vault classify: no taxonomy found (looked in {campaign_resolved}/taxonomy.yaml and payload template)", file=sys.stderr)
+        print(f"vault classify: no taxonomy found at {campaign_tax} (no valid subdomains)", file=sys.stderr)
         return 1
     allowed_buckets = {"SURE", "NEEDS_HUMAN_VALIDATION", "I_GUESSED"}
     allowed_relations = {"none", "comparison", "relationship", "progression"}
@@ -717,6 +747,8 @@ def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = Fal
     if dry_run:
         print(f"vault classify: dry-run — {len(judge_files)} judge files, allowed={sorted(allowed)}")
     failures = 0
+    classified = 0
+    skipped = 0
     for jf in judge_files:
         try:
             data = json.loads(jf.read_text(encoding="utf-8"))
@@ -763,6 +795,7 @@ def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = Fal
             doc_id = sibling.stem if sibling.exists() else jf.stem.replace(".judge", "")
             if (doc_id, primary) in existing:
                 print(f"vault classify: {jf.name} -> {primary} [{bucket}] (already ledgered, skipping)")
+                skipped += 1
                 continue
             if sibling.exists() and not dry_run:
                 txt = sibling.read_text(encoding="utf-8")
@@ -779,9 +812,9 @@ def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = Fal
                     if isinstance(v, list):
                         fm_lines.append(f"{k}:")
                         for item in v:
-                            fm_lines.append(f"  - {item}")
+                            fm_lines.append(f"  - {_yaml_dump_scalar(item)}")
                     else:
-                        fm_lines.append(f'{k}: "{v}"' if isinstance(v, str) and " " in v else f"{k}: {v}")
+                        fm_lines.append(f"{k}: {_yaml_dump_scalar(v)}")
                 fm_lines.append("---")
                 new_text = "\n".join(fm_lines) + "\n\n" + body
                 tmp = sibling.with_suffix(sibling.suffix + ".tmp")
@@ -809,14 +842,15 @@ def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = Fal
                     "policy_version": policy_version,
                     "model_id": model_val,
                     "top_k": top_k_val,
-                    "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                 }
                 with ledger_path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(event) + "\n")
                 existing.add((doc_id, primary))
             print(f"vault classify: {jf.name} -> {primary} [{bucket}]")
+            classified += 1
     if failures:
         print(f"vault classify: {failures} file(s) rejected (closed vocabulary)", file=sys.stderr)
         return 1
-    print(f"vault classify: {len(judge_files) - failures} classified, ledger {ledger_path}")
+    print(f"vault classify: {classified} classified, {skipped} skipped, ledger {ledger_path}")
     return 0
