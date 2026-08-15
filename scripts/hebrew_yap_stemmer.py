@@ -28,12 +28,14 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 
 def _find_yap_exe() -> str:
-    """Find the compiled YAP executable.
+    """Find the compiled YAP executable (Windows-only).
+
+    This project is Windows-only — no Unix/Linux support.
 
     Search order:
-      1. ``YAP_DIR/yap.exe`` (or ``yap`` on Unix-like) in config
-      2. Directory next to this script file
-      3. ``$PATH``
+      1. ``YAP_DIR/yap.exe`` from env var
+      2. ``deps/yap/yap.exe`` relative to project root
+      3. ``yap.exe`` on ``$PATH``
 
     Raises FileNotFoundError if not found.
     """
@@ -55,8 +57,8 @@ def _find_yap_exe() -> str:
             return candidate
 
     raise FileNotFoundError(
-        "YAP binary not found. Set YAP_DIR env var or place \"yap\" "
-        "in deps/yap/ next to this repo."
+        "YAP binary not found (Windows-only, expected yap.exe). "
+        "Set YAP_DIR env var or place \"yap.exe\" in deps/yap/ next to this repo."
     )
 
 
@@ -110,18 +112,17 @@ def analyze_tokens(words: list[str]) -> list[tuple[str, str]]:
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode != 0:
-            print(f"[yap WARN] stderr: {result.stderr[:200]}", file=sys.stderr)
-            # Fall back to identity mapping
-            return [(w, w) for w in words]
+            print(f"[yap ERROR] YAP failed (exit {result.returncode}): {result.stderr[:500]}", file=sys.stderr)
+            sys.exit(1)
 
         lattice_text = Path(tmp_lattice).read_text(encoding="utf-8")
         return _parse_lattice(lattice_text, words)
     except FileNotFoundError:
-        print(f"[yap ERROR] cannot find binary: {YAP_EXE or 'yap'}", file=sys.stderr)
-        return [(w, w) for w in words]
+        print(f"[yap ERROR] YAP binary not found: {YAP_EXE or 'yap.exe'}", file=sys.stderr)
+        sys.exit(1)
     except subprocess.TimeoutExpired:
-        print("[yap ERROR] timeout", file=sys.stderr)
-        return [(w, w) for w in words]
+        print("[yap ERROR] YAP timeout (30s) — failing closed", file=sys.stderr)
+        sys.exit(1)
     finally:
         try:
             os.unlink(tmp_input)
