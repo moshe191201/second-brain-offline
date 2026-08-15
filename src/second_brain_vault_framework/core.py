@@ -578,3 +578,182 @@ def cmd_status(root: Path) -> int:
               f"{'yes' if f'[[{stem}]]' in reg else 'NO':8} "
               f"{'yes' if stem in log else 'NO':5}")
     return 0
+
+
+def _load_taxonomy_subdomains(campaign: Path, root: Path) -> set[str]:
+    """Load allowed subdomains.
+
+    Strict: campaign/taxonomy.yaml must exist for real campaigns.
+    Fallback to payload template only when campaign file is genuinely absent (tests/check).
+    Callers that require a frozen campaign (cmd_classify) should check campaign file existence first.
+    """
+    # Campaign-resolved path is passed already resolved (root/campaign when relative)
+    txt = None
+    if campaign.is_absolute():
+        cand = campaign / "taxonomy.yaml" if campaign.is_dir() else campaign
+        # if campaign is taxonomy.yaml itself or dir containing it
+        if cand.is_dir():
+            cand = cand / "taxonomy.yaml"
+        if cand.exists():
+            txt = cand.read_text(encoding="utf-8")
+        elif (campaign / "taxonomy.yaml").exists():
+            txt = (campaign / "taxonomy.yaml").read_text(encoding="utf-8")
+    else:
+        # campaign is vault-relative; caller should have resolved, but handle both
+        for p in [root / campaign / "taxonomy.yaml", campaign / "taxonomy.yaml", payload_root() / "templates" / "classification" / "taxonomy.yaml"]:
+            if p.exists():
+                txt = p.read_text(encoding="utf-8")
+                break
+    # Fallback for tests: try payload directly if still none
+    if txt is None:
+        p = payload_root() / "templates" / "classification" / "taxonomy.yaml"
+        if p.exists():
+            txt = p.read_text(encoding="utf-8")
+    if txt is None:
+        return set()
+    subs = set()
+    for m in re.finditer(r"^\s{2}(\w+):\n", txt, flags=re.MULTILINE):
+        name = m.group(1)
+        if name not in ("subdomains", "version", "campaign"):
+            subs.add(name)
+    return subs
+
+
+def cmd_classify(root: Path, *, campaign: Path, store: Path, dry_run: bool = False) -> int:
+    """Closed-vocabulary validator: rejects primary/secondary not in taxonomy, patches frontmatter/ledger.
+
+    Reads store/*.judge.json produced by scripts/classify/judge.py, validates against
+    taxonomy.yaml, and on success patches the store md frontmatter with domains/doc_decision
+    and appends a ledger event. Pure stdlib — no LLM call.
+    """
+    # Resolve campaign before taxonomy load (I3)
+    campaign_resolved = (root / campaign) if not campaign.is_absolute() else campaign
+    # Strict: real campaign must have its own taxonomy.yaml; fallback only for tests where campaign is dummy
+    campaign_tax = campaign_resolved / "taxonomy.yaml" if campaign_resolved.is_dir() else campaign_resolved
+    if campaign_resolved.is_dir() and not campaign_tax.exists():
+        # Allow fallback only when no store exists yet (tests) — otherwise fail closed (C5)
+        store_path_check = (root / store) if not store.is_absolute() else store
+        if store_path_check.exists() and list(store_path_check.rglob("*.judge.json")):
+            print(f"vault classify: no taxonomy found at {campaign_tax} — run questionnaire and freeze taxonomy first", file=sys.stderr)
+            return 1
+    allowed = _load_taxonomy_subdomains(campaign_resolved if campaign_resolved.exists() else campaign, root)
+    if not allowed:
+        print(f"vault classify: no taxonomy found (looked in {campaign_resolved}/taxonomy.yaml and payload template)", file=sys.stderr)
+        return 1
+    allowed_buckets = {"SURE", "NEEDS_HUMAN_VALIDATION", "I_GUESSED"}
+    allowed_relations = {"none", "comparison", "relationship", "progression"}
+    # Resolve store path relative to vault root if needed
+    store_path = (root / store) if not store.is_absolute() else store
+    if not store_path.exists():
+        print(f"vault classify: store not found: {store_path}", file=sys.stderr)
+        return 1
+    judge_files = list(store_path.rglob("*.judge.json"))
+    if not judge_files:
+        print(f"vault classify: no judge outputs in {store_path} (run scripts/classify/judge.py first)", file=sys.stderr)
+        return 1
+
+    # Ledger path per backbone: campaigns/<campaign>/ledger.jsonl (or store-adjacent)
+    ledger_path = campaign_resolved / "ledger.jsonl" if campaign_resolved.is_dir() else campaign_resolved.parent / "ledger.jsonl"
+    # Load existing ledger for idempotency (I2)
+    existing: set[tuple] = set()
+    if ledger_path.exists():
+        for line in ledger_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                ev = json.loads(line)
+                existing.add((ev.get("doc_id"), ev.get("primary")))
+            except Exception:
+                pass
+    if dry_run:
+        print(f"vault classify: dry-run — {len(judge_files)} judge files, allowed={sorted(allowed)}")
+    failures = 0
+    for jf in judge_files:
+        try:
+            data = json.loads(jf.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            print(f"vault classify: bad JSON {jf}: {e}", file=sys.stderr)
+            failures += 1
+            continue
+        # Reject numeric confidence contamination (C4)
+        if "confidence" in data and isinstance(data.get("confidence"), (int, float)):
+            print(f"vault classify: {jf.name}: numeric confidence {data['confidence']} rejected — use confidence_bucket", file=sys.stderr)
+            failures += 1
+            continue
+        primary = data.get("primary_subdomain", "")
+        secondary = data.get("secondary_subdomains", [])
+        bucket = data.get("confidence_bucket", "")
+        relation = data.get("relation_type", "none")
+        reasoning = data.get("reasoning_brief", "")
+        # Strict bucket/relation/reasoning validation (C4)
+        if bucket not in allowed_buckets:
+            print(f"vault classify: {jf.name}: confidence_bucket '{bucket}' not in {sorted(allowed_buckets)} — rejected", file=sys.stderr)
+            failures += 1
+            continue
+        if relation not in allowed_relations:
+            print(f"vault classify: {jf.name}: relation_type '{relation}' not in {sorted(allowed_relations)} — rejected", file=sys.stderr)
+            failures += 1
+            continue
+        if not reasoning or not reasoning.strip():
+            print(f"vault classify: {jf.name}: reasoning_brief missing or empty — rejected", file=sys.stderr)
+            failures += 1
+            continue
+        if primary not in allowed:
+            print(f"vault classify: {jf.name}: primary '{primary}' not in taxonomy {sorted(allowed)} — rejected", file=sys.stderr)
+            failures += 1
+            continue
+        for s in secondary:
+            if s not in allowed:
+                print(f"vault classify: {jf.name}: secondary '{s}' not in taxonomy", file=sys.stderr)
+                failures += 1
+                break
+        else:
+            base = jf.name[:-len(".judge.json")]
+            sibling = jf.parent / f"{base}.md"
+            # Idempotency: skip if already ledgered with same primary (I2)
+            doc_id = sibling.stem if sibling.exists() else jf.stem.replace(".judge", "")
+            if (doc_id, primary) in existing:
+                print(f"vault classify: {jf.name} -> {primary} [{bucket}] (already ledgered, skipping)")
+                continue
+            if sibling.exists() and not dry_run:
+                txt = sibling.read_text(encoding="utf-8")
+                fm, body = parse_frontmatter(txt)
+                fm["domains"] = [primary] + secondary
+                fm["doc_decision"] = primary
+                fm["decided_by"] = "model"
+                fm_lines = ["---"]
+                for k, v in fm.items():
+                    if isinstance(v, list):
+                        fm_lines.append(f"{k}:")
+                        for item in v:
+                            fm_lines.append(f"  - {item}")
+                    else:
+                        fm_lines.append(f'{k}: "{v}"' if isinstance(v, str) and " " in v else f"{k}: {v}")
+                fm_lines.append("---")
+                new_text = "\n".join(fm_lines) + "\n\n" + body
+                tmp = sibling.with_suffix(sibling.suffix + ".tmp")
+                tmp.write_text(new_text, encoding="utf-8")
+                tmp.rename(sibling)
+            if not dry_run:
+                ledger_path.parent.mkdir(parents=True, exist_ok=True)
+                event = {
+                    "doc_id": doc_id,
+                    "stage": "classify",
+                    "status": "classified",
+                    "primary": primary,
+                    "secondary": secondary,
+                    "relation_type": relation,
+                    "confidence_bucket": bucket,
+                    "method": "model",
+                    "reasoning_brief": reasoning,
+                    "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+                }
+                with ledger_path.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(event) + "\n")
+                existing.add((doc_id, primary))
+            print(f"vault classify: {jf.name} -> {primary} [{bucket}]")
+    if failures:
+        print(f"vault classify: {failures} file(s) rejected (closed vocabulary)", file=sys.stderr)
+        return 1
+    print(f"vault classify: {len(judge_files) - failures} classified, ledger {ledger_path}")
+    return 0

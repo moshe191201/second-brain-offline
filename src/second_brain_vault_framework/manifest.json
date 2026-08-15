@@ -7,8 +7,14 @@
     ".claude/skills/vault-ingest/SKILL.md",
     ".claude/skills/vault-query/SKILL.md",
     ".claude/skills/vault-lint/SKILL.md",
+    ".claude/skills/vault-classify/SKILL.md",
     "scripts/vault.py",
-    "scripts/check_vault_answer.py"
+    "scripts/check_vault_answer.py",
+    "templates/classification/taxonomy.yaml",
+    "templates/classification/glossary.yaml",
+    "templates/classification/policy.yaml",
+    "templates/classification/questionnaire.md",
+    "templates/classification/label_studio/view.xml"
   ],
   "scaffold_only_paths": [
     "tests/VAULT_TESTS.md"

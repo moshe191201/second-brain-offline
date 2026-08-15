@@ -41,3 +41,11 @@ graphify: 141 nodes, 268 edges, 8 communities · qmd: 3 collections, 24 docs, 10
 ## [2026-06-16] ingest | Claude Fable 5 and Claude Mythos 5
 
 - source: [[Claude Fable 5 and Claude Mythos 5]]
+
+## [2026-08-15] ingest | Chinese frontier models compared: GLM-5, MiniMax M2.5 & M2.7, Kimi K2.5, Qwen 3.5, and MiMo-V2-Pro
+
+- source: [[Chinese frontier models compared GLM-5, MiniMax M2.5 & M2.7, Kimi K2.5, Qwen 3.5, and MiMo-V2-Pro]]
+
+## [2026-08-15] ingest | Surpassing Frontier Performance with Fusion
+
+- source: [[Surpassing Frontier Performance with Fusion]]
