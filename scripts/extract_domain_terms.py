@@ -55,6 +55,11 @@ from hebrew_yap_stemmer import _find_yap_exe as _yap_find  # noqa: E402 — for 
 from hot_words import _ENGLISH_STOP_WORDS, _HB_STOP_WORDS  # noqa: E402
 
 # sklearn is optional unless subdomain clustering requested
+# TODO: Gate sklearn import only when subdomain clustering is requested via CLI
+# flag (e.g. --cluster). Plan says "sklearn import gated only if subdomain
+# clustering is requested; otherwise warn and skip." Currently imported at
+# load to set _SKLEARN_AVAILABLE; defer to lazy import inside
+# write_subdomain_keywords when clustering is actually needed.
 _SKLEARN_AVAILABLE = False
 try:
     import sklearn  # noqa: F401
@@ -288,8 +293,8 @@ def scan_corpus(corpus_dir: Path):
                 chunk = unique_list[i:i + chunk_size]
                 pairs_all.extend(_hb_analyze(chunk))
         except Exception as e:
-            print(f"[WARN] YAP global batch failed: {e}", file=sys.stderr)
-            pairs_all = [(w, w) for w in unique_list]
+            print(f"ERROR: YAP analysis failed: {e}", file=sys.stderr)
+            sys.exit(1)
         lemma_by_surface: dict[str, str] = {}
         for orig, lemma in pairs_all:
             # keep first occurrence for deduped list
