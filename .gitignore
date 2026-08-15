@@ -20,9 +20,8 @@ site/
 
 **/graphify-out/.graphify_*
 
-# Offline docling models — selectable-text bundle (506 MB). Re-vendor via:
-# python scripts/download_docling_models.py && python scripts/package_docling_offline_bundle.py
-# Transfer once through the gap; distribute inside via NFS/S3.
+# Offline docling models — selectable-text bundle (506 MB). Re-vendor when available:
+# deps/docling-models/ carries the vendored bundle; transfer once through the gap
 /deps/docling-models/
 /deps/tessdata/
 

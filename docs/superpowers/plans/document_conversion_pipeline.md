@@ -8,16 +8,16 @@
 
 ## 1. Formats
 
-- **In scope:** `txt`, `msg`, `eml`, `docx`, `html`, `htm`, `pptx`, `pdf`, `vsdx`
-- **Explicitly out of scope:** `xlsx`, `csv`, `vsd` (legacy binary Visio; only `vsdx` is supported) (and any other extension → skipped, reported, not retried)
+- **In scope:** `txt`, `csv`, `msg`, `eml`, `docx`, `html`, `htm`, `mht`, `mhtml`, `pptx`, `xlsx`, `xls`, `pdf`, `vsdx`, `one`, `onepkg`, `onetoc2`
+- **Explicitly out of scope:** `vsd` (legacy binary Visio; only `vsdx` is supported) (and any other extension → skipped, reported, not retried)
 
 ## 2. Routing table (one converter per extension, no cross-library retry)
 
 | Extension | Converter | Notes |
 |-----------|-----------|-------|
-| `pdf`, `docx`, `pptx` | docling HTTP API | PDFs must always use docling |
-| `html`, `htm` | **pandoc** (`pandoc -f html -t gfm --wrap=none`) | *Change from original plan which routed html via docling* |
-| `txt` | `markitdown` (required — fail if missing) | |
+| `pdf`, `docx`, `pptx`, `xlsx`, `xls` | docling HTTP API | PDFs must always use docling; spreadsheets via docling |
+| `html`, `htm`, `mht`, `mhtml` | **pandoc** (`pandoc -f html -t gfm --wrap=none`) | *Change from original plan which routed html via docling* |
+| `txt`, `csv` | `markitdown` (required — fail if missing) | |
 | `msg` | `extract_msg` (required) | builds `Subject:/From:/To:/Date:` header block + body (pattern from `worktree stages.py`) |
 | `eml` | stdlib `email` | same header block + body |
 | `vsdx` | `vsdx` (`pip install vsdx`, see `scripts/vsdx_conversion.py`) | **Headless, text-only**: shapes + connectors → markdown tables + Mermaid `flowchart TD`; no image rendering, no Visio/COM, no human clicking; LLM without vision can understand. Only `.vsdx`; `.vsd` is unsupported. |
@@ -65,17 +65,17 @@ hebrew_fixed: true  # only when auto-fix fired
 - `created` priority: `msg`/`eml` Date header, `docx`/`pptx` core `created`, PDF `CreationDate` (`D:YYYYMMDDhhmmss`) → `path.stat().st_mtime`; if `now - created < 24h` omit field (RECENT_WINDOW)
 - Timezone-naive datetimes coerced to UTC.
 
-## 7. Hebrew reversal detection/fix (runs on ALL converted docs, incl. txt/msg/eml/pandoc-html)
+## 7. Hebrew reversal detection/fix (OCR-gated; final-form invariant always applies)
 
 **Symptoms:**
 - Reversed words: characters of a single word flipped (`םולש` → `שלום`)
 - Reversed word order: 2–3 word phrase in reverse order
 
-**Scoring (word-level):** For each Hebrew token (`[֐-׿]+`, length ≥2; single-char tokens never scored — waiver), compare `word` vs `char-reversed` via `wordfreq.word_frequency(lang='he')` (3.1.1) + persistent dictionary frequency. Clear win = `rev_score >= cur * margin` (or `cur==0` when final-form prefilter fires) → fix; close call → leave as-is + flag in `report["ambiguous"]`.
+**Scoring (word-level):** For each Hebrew token (`[֐-׿]+`, length ≥2; single-char tokens never scored — waiver), compare `word` vs `char-reversed` via `wordfreq.word_frequency(lang='he')` (3.1.1) + persistent dictionary frequency. Clear win = `rev_score >= cur * margin` (or `cur==0` when final-form prefilter fires) → fix; close call → leave as-is + flag in `report["ambiguous"]`. Dictionary-based flips are **OCR-gated** (`converter == "docling"`; `ocr=False` for `txt`/`html`/`msg`/`eml`/`vsdx`/`onenote`) — only the final-form invariant (`word[0] in FINAL_FORMS`) applies to all converters (prevents שמח→חמש corruption on textual docs, H2).
 
-**Scoring (phrase-level):** 2–3 word Hebrew sequences checked against phrase dictionary; `rev_phrase` frequency `>= cur * margin` (or `cur==0`) → fix word order.
+**Scoring (phrase-level):** 2–3 word Hebrew sequences checked against phrase dictionary; `rev_phrase` frequency `>= cur * margin` (or `cur==0`) → fix word order. Phrase reversal is **OCR-only** and requires `rev >= min_score` (1e-5) and `rev > cur`; close calls flagged as `ambiguous` (H3).
 
-**Final-form invariant (cheap pre-filter):** `ך ם ן ף ץ` may only end a word — token starting with one is treated as certain reversal (`cur` forced to `0`). Medial final-forms (`שלםום`) are **not** flagged (waiver).
+**Final-form invariant (cheap pre-filter):** `ך ם ן ף ץ` may only end a word — token starting with one is treated as certain reversal (`cur` forced to `0`). Applies even to non-OCR text. Medial final-forms (`שלםום`) are **not** flagged (waiver).
 
 **Tuning:** `hebrew.ambiguity_margin` (default `2.0`), `DEFAULT_MIN_SCORE=1e-5` floor on `rev_score` to suppress `wordfreq` noise (real words like `שלום ~4e-4`, corpus dict `~1e-3+`).
 

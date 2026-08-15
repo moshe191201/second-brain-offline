@@ -5,9 +5,9 @@ Usage:
     python scripts/convert_to_md.py <vault_root> [--force] [--config PATH]
 
 Routing (one converter per extension, no cross-library retry):
-    .pdf .docx .pptx     -> docling-serve HTTP API (see docling_convert.py)
-    .html .htm           -> pandoc  (pandoc -f html -t gfm --wrap=none)
-    .txt                 -> markitdown (required - fail if missing)
+    .pdf .docx .pptx .xlsx .xls -> docling-serve HTTP API (see docling_convert.py)
+    .html .htm .mht .mhtml -> pandoc  (pandoc -f html -t gfm --wrap=none)
+    .txt .csv            -> markitdown (required - fail if missing)
     .msg                 -> extract_msg
     .eml                 -> stdlib email
     .vsdx                -> vsdx (required - fail if missing: pip install vsdx)
@@ -19,7 +19,7 @@ Routing (one converter per extension, no cross-library retry):
                           + docling/pandoc/markitdown for embedded attachments
                           Requires .NET SDK 8.0+ (once) to build scripts/OneNoteOffline;
                           published output is self-contained. No OneNote/COM needed.
-    everything else      -> skipped (incl. xlsx/csv/vsd per spec, reported not retried)
+    everything else      -> skipped (incl. vsd per spec, reported not retried)
 
 Two passes: textual formats first (they feed the persistent Hebrew
 dictionary), then PDFs (OCR output is checked against that dictionary but
@@ -52,12 +52,14 @@ import hebrew_fix
 import onenote_conversion
 import vsdx_conversion
 
-DOCLING_EXTS = {".pdf", ".docx", ".pptx"}
+DOCLING_EXTS = {".pdf", ".docx", ".pptx", ".xlsx", ".xls"}
 ONENOTE_EXTS = {".one", ".onepkg", ".onetoc2"}
 VSDX_EXTS = {".vsdx"}
 ROUTING = {**{e: "docling" for e in DOCLING_EXTS},
-           ".txt": "markitdown", ".msg": "msg", ".eml": "email",
+           ".txt": "markitdown", ".csv": "markitdown",
+           ".msg": "msg", ".eml": "email",
            ".html": "pandoc", ".htm": "pandoc",
+           ".mht": "pandoc", ".mhtml": "pandoc",
            ".vsdx": "vsdx",
            **{e: "onenote" for e in ONENOTE_EXTS}}
 
@@ -350,16 +352,6 @@ def _file_hash(path: Path) -> str | None:
     return h.hexdigest()
 
 
-def _is_duplicate(seen: dict[str, str], file_hash: str | None, rel: str, report: dict) -> bool:
-    """Check hash dedup; if duplicate, record report and return True."""
-    if file_hash is not None and file_hash in seen:
-        report["files"][rel] = {"status": "duplicate", "duplicate_of": seen[file_hash], "hash": file_hash}
-        return True
-    if file_hash is not None:
-        seen[file_hash] = rel
-    return False
-
-
 def _resolve_canonical_link(att_hash: str, canonical: str, md_by_hash: dict[str, str], rel_by_hash: dict[str, str]) -> str:
     """Hide Message Chain for attachment canonical link resolution."""
     if att_hash in md_by_hash:
@@ -368,8 +360,23 @@ def _resolve_canonical_link(att_hash: str, canonical: str, md_by_hash: dict[str,
         for h, rel in rel_by_hash.items():
             if rel == canonical and h in md_by_hash:
                 return md_by_hash[h]
-        return md_by_hash.get(att_hash, str(Path(canonical.split("#")[0]).with_suffix(".md").as_posix()))
+        return str(Path(canonical.split("#")[0]).with_suffix(".md").as_posix())
     return str(Path(canonical.split("#")[0]).with_suffix(".md").as_posix())
+
+
+def _safe_att_name(att_name: str) -> str:
+    """Sanitize attachment filename to a safe .md name (M4: guard '.' / '..')."""
+    base = Path(att_name).name or "attachment"
+    if base in (".", ".."):
+        base = "attachment"
+    try:
+        md_name = Path(base).with_suffix(".md").name
+    except ValueError:
+        md_name = "attachment.md"
+    # Fallback if with_suffix produced empty or dot-only
+    if not md_name or md_name in (".md",):
+        md_name = "attachment.md"
+    return md_name
 
 
 def _patch_frontmatter_original_paths(md_path: Path, original_paths: list[str]) -> None:
@@ -424,8 +431,6 @@ def _handle_onenote_file(src: Path, rel: str, out_root: Path, raw_root: Path, cl
         seen[file_hash] = rel
         if duplicate_groups is not None:
             duplicate_groups.setdefault(rel, [rel])
-    elif _is_duplicate(seen, file_hash, rel, report):
-        return True
     try:
         written = onenote_conversion.convert_onenote_file(src, out_root, raw_root, client, cfg)
         md_pages = [p for p in written if p.suffix == ".md"]
@@ -505,8 +510,6 @@ def run(vault_root: Path, force: bool = False,
         if file_hash is not None:
             seen[file_hash] = rel
             duplicate_groups.setdefault(rel, [rel])
-        elif _is_duplicate(seen, file_hash, rel, report):
-            continue
         dst = _out_path(raw_root, out_root, src)
         if should_skip(src, dst, force):
             report["files"][rel] = {"status": "skipped", "reason": "up to date"}
@@ -551,31 +554,11 @@ def run(vault_root: Path, force: bool = False,
         dictionary = hebrew_fix.build_dictionary(good_texts, dict_path)
 
         if onenote_written:
-            from collections import defaultdict
-            onenote_fix_by_src: dict[str, dict] = defaultdict(lambda: {"fixed_any": False, "ambiguous_all": []})
-            for src_rel, page_path in onenote_written:
-                try:
-                    content = page_path.read_text(encoding="utf-8")
-                    body = content
-                    fm = ""
-                    if content.startswith("---\n"):
-                        end = content.find("\n---\n", 4)
-                        if end != -1:
-                            fm = content[: end + 5]
-                            body = content[end + 5 :]
-                    fixed_body, fr = hebrew_fix.fix_text(body, dictionary, margin=margin)
-                    if fixed_body != body:
-                        page_path.write_text(fm + fixed_body, encoding="utf-8")
-                    agg = onenote_fix_by_src[src_rel]
-                    if fr.get("hebrew_fixed"):
-                        agg["fixed_any"] = True
-                    agg["ambiguous_all"].extend(fr.get("ambiguous", []))
-                except OSError:
-                    pass
-            for src_rel, agg in onenote_fix_by_src.items():
+            # OneNote is not OCR — do not apply reversal fixer (H2). Only report.
+            for src_rel in {rel for rel, _ in onenote_written}:
                 if src_rel in report["files"]:
-                    report["files"][src_rel]["hebrew_fixed"] = agg["fixed_any"]
-                    report["files"][src_rel]["ambiguous"] = agg["ambiguous_all"]
+                    report["files"][src_rel]["hebrew_fixed"] = False
+                    report["files"][src_rel]["ambiguous"] = []
 
         convert_batch(pass2, use_workers=True)
     except docling_convert.DoclingServerDown as exc:
@@ -583,7 +566,9 @@ def run(vault_root: Path, force: bool = False,
         raise docling_convert.DoclingServerDown(_format_down_error(exc, _pending_before_exit), _pending_before_exit) from exc
     finally:
         monitor.stop()
-        if _pending_before_exit is None and client.is_down():
+        # M2: don't swallow a real exception (e.g. RuntimeError during conversion)
+        # — only raise DoclingServerDown from finally when no exception is already in flight
+        if _pending_before_exit is None and client.is_down() and sys.exc_info()[0] is None:
             pending = client.pending_snapshot()
             if not pending:
                 pending = [p for p in todo if p not in results]
@@ -593,15 +578,21 @@ def run(vault_root: Path, force: bool = False,
                      rel_key: str | None = None,
                      original_name: str | None = None,
                      original_paths: list[str] | None = None,
-                     attachment_of: str | None = None):
+                     attachment_of: str | None = None,
+                     parent_created: datetime | None = None):
         dst = dst or _out_path(raw_root, out_root, src)
         rel = rel_key or src.relative_to(raw_root).as_posix()
         if "error" in res:
             report["files"][rel] = {"status": "failed", "error": res["error"]}
             return None
         md = res["md"]
-        fixed, fix_report = hebrew_fix.fix_text(md, dictionary, margin=margin)
+        # H2: dictionary-based reversal is OCR-only; final-form invariant remains for all (H1 fix)
+        ocr = res.get("converter") == "docling"
+        fixed, fix_report = hebrew_fix.fix_text(md, dictionary, margin=margin, ocr=ocr)
         meta_title, meta_created = res["meta"]
+        # M3: attachments from NamedTemporaryFile have mtime == now; inherit parent
+        if parent_created is not None:
+            meta_created = parent_created
         shown = original_name or src.name
         title = resolve_title(meta_title, fixed, Path(shown))
         created = resolve_created(meta_created, src)
@@ -630,6 +621,8 @@ def run(vault_root: Path, force: bool = False,
             converted_links = []
             seen_att_dsts: set[str] = set()
             parent_md_rel = _out_path(raw_root, out_root, src).relative_to(out_root).as_posix()
+            # M3: attachments inherit parent message date, not temp file mtime
+            _parent_created = res.get("meta", (None, None))[1] if isinstance(res.get("meta"), tuple) else None
             for att_name, att_bytes in res["attachments"]:
                 att_rel_base = f"{src.relative_to(raw_root).as_posix()}#{att_name}"
                 att_rel = att_rel_base
@@ -654,7 +647,7 @@ def run(vault_root: Path, force: bool = False,
 
                 att_dst = (out_root / src.relative_to(raw_root).parent
                            / f"{src.stem}_attachments"
-                           / Path(att_name).with_suffix(".md").name)
+                           / _safe_att_name(att_name))
                 # Handle name collisions for output path
                 if att_dst.exists() or att_dst.as_posix() in seen_att_dsts:
                     stem = Path(att_name).stem or "attachment"
@@ -679,7 +672,8 @@ def run(vault_root: Path, force: bool = False,
                     else:
                         write_output(tmp_path, att_result, dst=att_dst,
                                      rel_key=att_rel, original_name=att_name,
-                                     attachment_of=parent_md_rel)
+                                     attachment_of=parent_md_rel,
+                                     parent_created=_parent_created)
                         # Remember this attachment's hash so later attachments dedup against it
                         if att_hash not in seen:
                             seen[att_hash] = att_rel

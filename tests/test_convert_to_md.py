@@ -125,9 +125,9 @@ class TestEndToEnd(VaultCase):
         self.assertEqual(StubDoclingHandler.received_files, ["doc.docx"])
 
     def test_unsupported_extensions_skipped(self):
-        (self.vault / "raw" / "data.xlsx").write_bytes(b"PK")
+        (self.vault / "raw" / "data.vsd").write_bytes(b"fake vsd")
         report = run(self.vault)
-        self.assertEqual(report["files"]["data.xlsx"]["status"], "skipped")
+        self.assertEqual(report["files"]["data.vsd"]["status"], "skipped")
         self.assertFalse((self.vault / "raw_md" / "data.md").exists())
 
     def test_rerun_skips_up_to_date_outputs(self):

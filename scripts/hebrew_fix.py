@@ -43,20 +43,33 @@ class HebrewDictionary:
     def __init__(self):
         self.words: Counter[str] = Counter()
         self.phrases: Counter[str] = Counter()
+        self._words_total: int | None = None
+        self._phrases_total: int | None = None
+
+    def _invalidate_cache(self) -> None:
+        self._words_total = None
+        self._phrases_total = None
 
     def update_from_text(self, text: str) -> None:
         tokens = HEBREW_TOKEN_RE.findall(text)
-        self.words.update(tokens)
+        if tokens:
+            self.words.update(tokens)
+            self._words_total = None
         for n in (2, 3):
             for i in range(len(tokens) - n + 1):
                 self.phrases[" ".join(tokens[i : i + n])] += 1
+                self._phrases_total = None
 
     def word_freq(self, word: str) -> float:
-        total = sum(self.words.values())
+        if self._words_total is None:
+            self._words_total = sum(self.words.values())
+        total = self._words_total
         return self.words[word] / total if total else 0.0
 
     def phrase_freq(self, phrase: str) -> float:
-        total = sum(self.phrases.values())
+        if self._phrases_total is None:
+            self._phrases_total = sum(self.phrases.values())
+        total = self._phrases_total
         return self.phrases[phrase] / total if total else 0.0
 
     def save(self, path: Path) -> None:
@@ -76,6 +89,7 @@ class HebrewDictionary:
             data = json.loads(path.read_text(encoding="utf-8"))
             d.words.update(data.get("words", {}))
             d.phrases.update(data.get("phrases", {}))
+            d._invalidate_cache()
         return d
 
 
@@ -93,12 +107,18 @@ def _word_score(word: str, d: HebrewDictionary) -> float:
 
 
 def _fix_word(word: str, d: HebrewDictionary, margin: float, min_score: float,
-              report: dict) -> str:
+              report: dict, ocr: bool = True) -> str:
     if len(word) < 2:
         return word
+    is_final_form = word[0] in FINAL_FORMS
     cur = _word_score(word, d)
-    if word[0] in FINAL_FORMS:
+    if is_final_form:
         cur = 0.0  # final-form letter at word start: certain char-reversal
+    elif not ocr:
+        # H2: dictionary-based reversal fixing is OCR-only. For non-OCR text
+        # (txt/html/msg/eml/vsdx/onenote) only the final-form invariant is safe;
+        # margin-based flips (e.g. שמח->חמש) would silently corrupt correct text.
+        return word
     rev = word[::-1]
     rev_score = _word_score(rev, d)
     if rev_score < min_score or rev_score <= cur:
@@ -110,7 +130,10 @@ def _fix_word(word: str, d: HebrewDictionary, margin: float, min_score: float,
     return word
 
 
-def _fix_phrases(seq: str, d: HebrewDictionary, margin: float, report: dict) -> str:
+def _fix_phrases(seq: str, d: HebrewDictionary, margin: float,
+                 min_score: float, report: dict, ocr: bool = True) -> str:
+    if not ocr:
+        return seq
     words = seq.split(" ")
     i = 0
     out = []
@@ -124,12 +147,17 @@ def _fix_phrases(seq: str, d: HebrewDictionary, margin: float, report: dict) -> 
             rev_phrase = " ".join(reversed(window))
             cur = d.phrase_freq(phrase)
             rev = d.phrase_freq(rev_phrase)
-            if rev > 0 and (cur == 0 and rev > 0 or rev >= cur * margin):
+            if rev < min_score or rev <= cur:
+                continue
+            if cur == 0 or rev >= cur * margin:
                 report["fixed_phrases"].append(phrase)
                 out.extend(reversed(window))
                 i += n
                 fixed = True
                 break
+            # Close call: same ambiguous reporting as word-level
+            report["ambiguous"].append(phrase)
+            break
         if not fixed:
             out.append(words[i])
             i += 1
@@ -137,7 +165,7 @@ def _fix_phrases(seq: str, d: HebrewDictionary, margin: float, report: dict) -> 
 
 
 def fix_text(text: str, d: HebrewDictionary, margin: float = DEFAULT_MARGIN,
-             min_score: float = DEFAULT_MIN_SCORE):
+             min_score: float = DEFAULT_MIN_SCORE, ocr: bool = True):
     """Return (fixed_text, report). report keys: fixed_words, fixed_phrases,
     ambiguous, hebrew_fixed."""
     report = {"fixed_words": [], "fixed_phrases": [], "ambiguous": [],
@@ -146,8 +174,9 @@ def fix_text(text: str, d: HebrewDictionary, margin: float = DEFAULT_MARGIN,
         return text, report
 
     text = HEBREW_TOKEN_RE.sub(
-        lambda m: _fix_word(m.group(0), d, margin, min_score, report), text)
-    text = HEBREW_SEQ_RE.sub(lambda m: _fix_phrases(m.group(0), d, margin, report), text)
+        lambda m: _fix_word(m.group(0), d, margin, min_score, report, ocr=ocr), text)
+    text = HEBREW_SEQ_RE.sub(
+        lambda m: _fix_phrases(m.group(0), d, margin, min_score, report, ocr=ocr), text)
 
     report["hebrew_fixed"] = bool(report["fixed_words"] or report["fixed_phrases"])
     return text, report

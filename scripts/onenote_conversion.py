@@ -48,13 +48,6 @@ else:
     VaultCfg = dict  # type: ignore
 
 ONENOTE_EXTS = {".one", ".onepkg", ".onetoc2"}
-
-if TYPE_CHECKING:
-    from convert_to_md import VaultCfg
-else:
-    VaultCfg = dict  # type: ignore
-
-ONENOTE_EXTS = {".one", ".onepkg", ".onetoc2"}
 # Also treat a directory that contains .onetoc2 as a OneNote notebook
 DOTNET_PROJECT = Path(__file__).parent / "OneNoteOffline" / "OneNoteOffline.csproj"
 DOTNET_DLL = Path(__file__).parent / "OneNoteOffline" / "bin" / "Release" / "net8.0" / "OneNoteOffline.dll"
