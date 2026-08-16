@@ -1,7 +1,7 @@
 {
   "framework_version": "0.1.0",
   "vault_name": "Example",
-  "installed_at": "2026-08-09T16:01:40",
+  "installed_at": "2026-08-15T23:52:29",
   "manifest": {
     "framework_version": "0.1.0",
     "owned_paths": [
@@ -11,8 +11,14 @@
       ".claude/skills/vault-ingest/SKILL.md",
       ".claude/skills/vault-query/SKILL.md",
       ".claude/skills/vault-lint/SKILL.md",
+      ".claude/skills/vault-classify/SKILL.md",
       "scripts/vault.py",
       "scripts/check_vault_answer.py",
+      "templates/classification/taxonomy.yaml",
+      "templates/classification/glossary.yaml",
+      "templates/classification/policy.yaml",
+      "templates/classification/questionnaire.md",
+      "templates/classification/label_studio/view.xml",
       "templates/ingest-pipeline/01-assess/GUIDANCE.md",
       "templates/ingest-pipeline/01-assess/QUESTIONS.md",
       "templates/ingest-pipeline/02-filtering/QUESTIONS.md",
