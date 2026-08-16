@@ -464,6 +464,25 @@ transferred into the closed environment.
 | `graphify`                       | `~/.claude/skills/graphify/`                       | The graph pipeline the agent follows. **(artifact)**            |
 | `qmd`                            | inside the qmd plugin (`skills/qmd/`)              | Search/retrieval craft. Ships with the plugin.                  |
 
+### Document conversion pipeline
+
+| Dependency | Version | Role |
+|---|---|---|
+| `pandoc` | ≥3.0 | HTML/MHT -> Markdown (`pandoc -f html -t gfm`). **Required, not optional** - `convert_to_md.py` fails if missing. |
+| `docling-serve` | any | PDF/DOCX/PPTX/XLSX/XLS -> Markdown via `docling_convert.py`. Run `python scripts/download_docling_models.py` or `scripts/install_docling_offline_bundle.py` for offline. |
+| `.NET SDK` | **8.0.424+** | **Required for local OneNote files** (`.one`, `.onepkg`, `.onetoc2`). Offline parser via `OfficeIMO.OneNote` 3.2.2 in `scripts/OneNoteOffline` (pure managed, no OneNote/COM/Graph). Build once: `dotnet build scripts/OneNoteOffline -c Release` or auto-built on first `convert_to_md.py` run. Install: `winget install Microsoft.DotNet.SDK.8` or https://aka.ms/dotnet-download . Published output is self-contained - no SDK needed after first build. |
+| `OfficeIMO.OneNote` | 3.2.2 | NuGet, restored via `dotnet build`. Handles Desktop `.one` + FSSHTTP `.one` + `.onetoc2` + `.onepkg` (bounded parsing, `Docs/officeimo.onenote.current-state.md`). |
+
+Routing (`scripts/convert_to_md.py` + `scripts/onenote_conversion.py`):
+```
+.pdf/.docx/.pptx/.xlsx/.xls -> docling
+.html/.htm/.mht/.mhtml      -> pandoc
+.txt/.csv                   -> markitdown
+.msg                       -> extract_msg
+.eml                       -> stdlib email
+.one/.onepkg/.onetoc2      -> OfficeIMO.OneNote offline (headless, no clicks) -> docling/pandoc/markitdown for embedded attachments (images kept, pdf/docx/pptx/xlsx via docling, html via pandoc)
+```
+
 ### Explicitly NOT needed
 
 - No internet at runtime. No `GEMINI_API_KEY` / `GOOGLE_API_KEY` / any cloud API key.

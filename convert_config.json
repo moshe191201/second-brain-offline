@@ -1,0 +1,16 @@
+{
+  "docling": {
+    "url": "http://localhost:5001",
+    "workers": 1,
+    "timeout": 300,
+    "retry_delay": 1.0
+  },
+  "pdf": {
+    "split_threshold": 100,
+    "chunk_pages": 50
+  },
+  "hebrew": {
+    "dict_path": "data/hebrew_dict.json",
+    "ambiguity_margin": 2.0
+  }
+}
