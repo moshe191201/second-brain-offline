@@ -32,33 +32,36 @@ def _find_yap_exe() -> str:
 
     This project is Windows-only — no Unix/Linux support.
 
-    Search order:
-      1. ``YAP_DIR/yap.exe`` from env var
-      2. ``deps/yap/yap.exe`` relative to project root
-      3. ``yap.exe`` on ``$PATH``
+    YAP is an external dependency (not vendored). Install it separately.
 
-    Raises FileNotFoundError if not found.
+    Search order:
+      1. ``YAP_DIR/yap.exe`` from env var — if YAP_DIR is set it MUST contain yap.exe (fail-closed, no PATH fallback).
+      2. ``yap.exe`` on ``$PATH`` (only when YAP_DIR is unset).
+
+    Raises FileNotFoundError with install instructions if not found.
     """
     yap_dir = os.environ.get("YAP_DIR")
     if yap_dir:
         exe = os.path.join(yap_dir, "yap.exe")
         if os.path.isfile(exe):
             return exe
+        raise FileNotFoundError(
+            f"YAP binary not found at YAP_DIR={yap_dir!r} (expected yap.exe there). "
+            "Install YAP and set YAP_DIR to its directory, or put yap.exe on $PATH. "
+            "See https://github.com/ONLP-Lab/yap"
+        )
 
-    # Next to this module
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    parent = os.path.dirname(script_dir)  # project root
-    for candidate in [
-        os.path.join(parent, "deps", "yap", "yap.exe"),
-        os.path.join(parent, "yap", "yap.exe"),
-        "yap.exe",          # assume in $PATH
-    ]:
-        if os.path.isfile(candidate):
-            return candidate
+    # yap.exe on $PATH
+    import shutil
+    found = shutil.which("yap.exe") or shutil.which("yap")
+    if found:
+        return found
 
     raise FileNotFoundError(
         "YAP binary not found (Windows-only, expected yap.exe). "
-        "Set YAP_DIR env var or place \"yap.exe\" in deps/yap/ next to this repo."
+        "YAP is an external dependency — install it separately and either "
+        "set YAP_DIR env var to its directory or put yap.exe on $PATH. "
+        "See https://github.com/ONLP-Lab/yap"
     )
 
 
@@ -112,17 +115,16 @@ def analyze_tokens(words: list[str]) -> list[tuple[str, str]]:
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode != 0:
-            print(f"[yap ERROR] YAP failed (exit {result.returncode}): {result.stderr[:500]}", file=sys.stderr)
-            sys.exit(1)
+            raise RuntimeError(f"YAP failed (exit {result.returncode}): {result.stderr[:500]}")
 
         lattice_text = Path(tmp_lattice).read_text(encoding="utf-8")
         return _parse_lattice(lattice_text, words)
     except FileNotFoundError:
-        print(f"[yap ERROR] YAP binary not found: {YAP_EXE or 'yap.exe'}", file=sys.stderr)
-        sys.exit(1)
-    except subprocess.TimeoutExpired:
-        print("[yap ERROR] YAP timeout (30s) — failing closed", file=sys.stderr)
-        sys.exit(1)
+        raise
+    except RuntimeError:
+        raise
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("YAP timeout (30s) — failing closed") from e
     finally:
         try:
             os.unlink(tmp_input)
