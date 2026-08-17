@@ -12,6 +12,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 from extract_domain_terms import scan_corpus, score_terms, resolve_corpus_dir
 
 
+def _yap_available() -> bool:
+    try:
+        from hebrew_yap_stemmer import _find_yap_exe
+        _find_yap_exe()
+        return True
+    except Exception:
+        return False
+
+_YAP_SKIP = "YAP not installed — install YAP and ensure yap.exe is on $PATH or set YAP_DIR (https://github.com/ONLP-Lab/yap)"
+
+
 class TestResolveCorpusDir(unittest.TestCase):
     def test_prefers_raw_md(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -42,6 +53,7 @@ class TestResolveCorpusDir(unittest.TestCase):
 
 
 class TestScanCorpusMixed(unittest.TestCase):
+    @unittest.skipUnless(_yap_available(), _YAP_SKIP)
     def test_mixed_normalization(self):
         with tempfile.TemporaryDirectory() as tmp:
             corpus = Path(tmp)
@@ -55,6 +67,7 @@ class TestScanCorpusMixed(unittest.TestCase):
             # he_prefix_map
             self.assertIn("ה", scan["he_prefix_map"]["api"])
 
+    @unittest.skipUnless(_yap_available(), _YAP_SKIP)
     def test_variant_map_hebrew(self):
         with tempfile.TemporaryDirectory() as tmp:
             corpus = Path(tmp)
