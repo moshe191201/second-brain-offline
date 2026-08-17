@@ -4,8 +4,9 @@
 Uses YAP's ``hebma`` subcommand for lexicon-based morphological disambiguation.
 Returns lemma forms that collapse inflected / prefixed variants into shared stems.
 
-This is a lightweight alternative to rule-based suffix stripping.  It requires
-the YAP Go binary installed alongside this script.
+This is a lightweight alternative to rule-based suffix stripping.  Requires
+external YAP Go binary via ``YAP_DIR`` or ``$PATH`` — see ``_find_yap_exe()``
+(install from https://github.com/ONLP-Lab/yap).
 
 Usage:
     python scripts/hebrew_yap_stemmer.py "שלומך שלומית שלי רצונם"
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -52,7 +54,6 @@ def _find_yap_exe() -> str:
         )
 
     # yap.exe on $PATH
-    import shutil
     found = shutil.which("yap.exe") or shutil.which("yap")
     if found:
         return found
