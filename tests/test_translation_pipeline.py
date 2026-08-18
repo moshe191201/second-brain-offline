@@ -123,6 +123,11 @@ class TestDeterministicMasking(unittest.TestCase):
             vault = tmp_path / "vault"
             (vault / "raw_md").mkdir(parents=True)
             (vault / "data" / "domain_terms").mkdir(parents=True)
+            # Person-name guard is fail-closed — provide real lists for tmp vault
+            import shutil
+            _src_pn = Path(__file__).resolve().parents[1] / "data" / "person_names"
+            if _src_pn.exists():
+                shutil.copytree(_src_pn, vault / "data" / "person_names", dirs_exist_ok=True)
             glossary_csv = vault / "data" / "domain_terms" / "glossary.csv"
             glossary_csv.write_text(
                 "term_he,english,status\n"
@@ -178,6 +183,11 @@ class TestDeterministicMasking(unittest.TestCase):
             vault = tmp_path / "vault"
             (vault / "raw_md").mkdir(parents=True)
             (vault / "data" / "domain_terms").mkdir(parents=True)
+            # Person-name guard is fail-closed — provide real lists for tmp vault
+            import shutil as _shutil2
+            _src_pn2 = Path(__file__).resolve().parents[1] / "data" / "person_names"
+            if _src_pn2.exists():
+                _shutil2.copytree(_src_pn2, vault / "data" / "person_names", dirs_exist_ok=True)
             # glossary as specified: מערכת->system, DB->DB, אבטחת מידע->Information Security
             (vault / "data" / "domain_terms" / "glossary.csv").write_text(
                 "term_he,english,keep_source,notes,status,example_doc\n"

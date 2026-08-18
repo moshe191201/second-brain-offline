@@ -200,17 +200,22 @@ def load_codenames(vault_root: Path) -> set[str]:
 def load_person_names(vault_root: Path, exclude: set[str] | None = None) -> tuple[set[str], set[str]]:
     first_p = vault_root / "data" / "person_names" / "first_names.txt"
     last_p = vault_root / "data" / "person_names" / "last_names_ranked.txt"
+    if not first_p.exists():
+        raise RuntimeError(f"person name file missing: {first_p} — restore data/person_names/first_names.txt (593 names) — fail-closed, refusing to run with empty guard")
+    if not last_p.exists():
+        raise RuntimeError(f"person name file missing: {last_p} — restore data/person_names/last_names_ranked.txt (818 names) — fail-closed")
     first: set[str] = set()
     last: set[str] = set()
     for p, s in [(first_p, first), (last_p, last)]:
-        if p.exists():
-            try:
-                for line in p.read_text(encoding="utf-8").splitlines():
-                    t = line.strip()
-                    if t:
-                        s.add(t)
-            except OSError:
-                pass
+        try:
+            for line in p.read_text(encoding="utf-8").splitlines():
+                t = line.strip()
+                if t:
+                    s.add(t)
+        except OSError as e:
+            raise RuntimeError(f"cannot read {p}: {e}") from e
+    if not first or not last:
+        raise RuntimeError(f"person name files empty: {first_p} ({len(first)}), {last_p} ({len(last)}) — expected 593 + 818, fail-closed")
     # Codename exclusion: org codenames that are common Hebrew names must be translated,
     # not masked as PERSON. Static file + dynamic glossary terms are both excluded.
     codenames = load_codenames(vault_root)
