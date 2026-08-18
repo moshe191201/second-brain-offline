@@ -24,14 +24,40 @@ PKG = ROOT / "src" / "second_brain_vault_framework"
 _OWN_PACKAGE = "second_brain_vault_framework"
 
 
+def _dynamic_import_target(node: ast.AST) -> str | None:
+    """Module name from `__import__("x")` / `importlib.import_module("x")`.
+
+    Plain `import x` is the easy case. A dependency introduced as an optional
+    lazy import is the realistic way one sneaks in, and it is invisible to an
+    ast.Import walk.
+    """
+    if not isinstance(node, ast.Call) or not node.args:
+        return None
+    fn = node.func
+    name = (fn.id if isinstance(fn, ast.Name)
+            else fn.attr if isinstance(fn, ast.Attribute) else None)
+    if name not in ("__import__", "import_module"):
+        return None
+    arg = node.args[0]
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        return arg.value.split(".")[0]
+    # A computed module name cannot be checked statically; flag it rather than
+    # let it through, since that is the one form that could hide anything.
+    return "<dynamic>"
+
+
 def _imported_top_level_modules(py: Path) -> set[str]:
-    """Every top-level module name imported by a file."""
+    """Every top-level module name a file imports, static or dynamic."""
     mods: set[str] = set()
     for node in ast.walk(ast.parse(py.read_text(encoding="utf-8"))):
         if isinstance(node, ast.Import):
             mods.update(a.name.split(".")[0] for a in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             mods.add(node.module.split(".")[0])
+        else:
+            dyn = _dynamic_import_target(node)
+            if dyn:
+                mods.add(dyn)
     return mods
 
 
@@ -50,7 +76,7 @@ class TestFrameworkIsPureStdlib(unittest.TestCase):
         # A test dependency is still a dependency: if the suite needs a package,
         # CI can no longer prove the air-gap claim.
         offenders = []
-        for py in sorted((ROOT / "tests").glob("*.py")):
+        for py in sorted((ROOT / "tests").rglob("*.py")):
             for mod in _imported_top_level_modules(py) - {_OWN_PACKAGE}:
                 if mod not in sys.stdlib_module_names:
                     offenders.append(f"{py.relative_to(ROOT)} imports {mod!r}")
@@ -73,13 +99,34 @@ class TestFrameworkDoesNotKnowAboutThePipeline(unittest.TestCase):
                or "classification" in p or "vault-classify" in p]
         self.assertEqual(bad, [], "the pipeline must not ship into user vaults")
 
+    def _is_pipeline_ref(self, text: str) -> bool:
+        return (any(m in text for m in self._PIPELINE_MARKERS)
+                or "classification" in text or "vault-classify" in text)
+
     def test_no_payload_file_belongs_to_the_pipeline(self):
         payload = PKG / "payload"
-        bad = [str(f.relative_to(payload)) for f in payload.rglob("*")
-               if f.is_file() and (any(m in str(f) for m in self._PIPELINE_MARKERS)
-                                   or "classification" in str(f)
-                                   or "vault-classify" in str(f))]
+        # Match on the path RELATIVE to the payload. Matching str(f) tested the
+        # absolute path, so any checkout living under a directory named e.g.
+        # ".../ingest-pipeline/repo" failed listing every payload file.
+        bad = [f.relative_to(payload).as_posix() for f in payload.rglob("*")
+               if f.is_file() and self._is_pipeline_ref(f.relative_to(payload).as_posix())]
         self.assertEqual(bad, [], "payload is what a vault owner receives")
+
+    def test_no_payload_file_mentions_the_pipeline(self):
+        # Paths alone are not enough: a payload doc whose body tells a vault owner
+        # to run ingest-pipeline/scripts/... ships that instruction to every vault.
+        payload = PKG / "payload"
+        bad = []
+        for f in sorted(payload.rglob("*")):
+            if not f.is_file() or f.name == ".DS_Store":
+                continue
+            try:
+                text = f.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if self._is_pipeline_ref(text):
+                bad.append(f.relative_to(payload).as_posix())
+        self.assertEqual(bad, [], "payload content must not reference the pipeline")
 
     def test_package_source_never_references_the_pipeline(self):
         bad = []
@@ -106,12 +153,31 @@ class TestManifestMatchesPayload(unittest.TestCase):
             out.add(rel.replace("dot-claude/", ".claude/", 1) if rel.startswith("dot-claude/") else rel)
         return out
 
-    def test_every_owned_path_exists_in_the_payload(self):
+    # Payload files that are deliberately in neither owned_paths nor
+    # scaffold_only_paths. `gitignore` is written by cmd_scaffold directly
+    # (core.py, via render_template("gitignore")) and is never re-laid by
+    # cmd_upgrade, so editing it in the payload does NOT reach existing vaults
+    # and `vault upgrade` cannot fix a stale one. Listed here so that stays a
+    # deliberate exception rather than an invisible one.
+    _UNMANIFESTED = {"gitignore"}
+
+    def _manifested(self) -> set[str]:
         manifest = json.loads((PKG / "manifest.json").read_text(encoding="utf-8"))
-        present = self._payload_rel_paths()
-        missing = [p for p in manifest["owned_paths"] + manifest["scaffold_only_paths"]
-                   if p not in present]
+        return set(manifest["owned_paths"]) | set(manifest["scaffold_only_paths"])
+
+    def test_every_owned_path_exists_in_the_payload(self):
+        missing = sorted(self._manifested() - self._payload_rel_paths())
         self.assertEqual(missing, [], "owned but not shipped — upgrade would never install it")
+
+    def test_every_payload_file_is_claimed_by_the_manifest(self):
+        # The reverse direction. src/second_brain_vault_framework/CLAUDE.md names
+        # this exact failure: a payload file with no manifest entry is silently
+        # ignored by both scaffold and upgrade, so it ships to nobody and nothing
+        # says so.
+        unclaimed = sorted(self._payload_rel_paths() - self._manifested() - self._UNMANIFESTED)
+        self.assertEqual(unclaimed, [],
+                         "payload file with no manifest entry — add it to owned_paths "
+                         "or to _UNMANIFESTED with a reason")
 
 
 
@@ -155,7 +221,13 @@ class TestExampleVaultIsCurrent(unittest.TestCase):
                 if not before.exists():
                     drifted.append(f"{rel} (upgrade would ADD it)")
                     continue
-                a, b = after.read_bytes(), before.read_bytes()
+                # read_text, NOT read_bytes: cmd_upgrade writes via Path.write_text
+                # with no newline= argument, so Python text mode emits CRLF on
+                # Windows while git may have checked the file out as LF. A byte
+                # comparison would report all 8 owned paths as drifted on a clean
+                # tree, and the suggested remedy (upgrade + commit) would not help.
+                a = after.read_text(encoding="utf-8")
+                b = before.read_text(encoding="utf-8")
                 if a == b:
                     continue
                 if rel.name == ".vault-framework.json":

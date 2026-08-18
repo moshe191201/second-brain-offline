@@ -193,9 +193,25 @@ stages 3 and 4 — the stages Yoni is about to depend on. Installing the deps ta
 remediation message instead of failing to import) is the cheap partial fix, and it is already
 proven on the YAP-dependent tests — those are the 2 clean skips.
 
-**4.5 Set up GitHub Actions CI.** There is still **no CI on GitHub** — `.gitlab-ci.yml` is the only
-config, so all seven PRs merged with zero automated checks — including #15, which added the
-checkpoint store this pipeline's survivability now depends on. Two lanes: framework (cross-platform,
+**4.5 Set up GitHub Actions CI.** — **DONE (PR #17)**. Two workflows: `framework.yml`
+(ubuntu/macos/windows x py3.11/3.12, running the suite with **nothing installed** so the
+air-gap claim is actually proven, plus packaging, wheel-payload and `mkdocs --strict` jobs)
+and `pipeline.yml` (windows-latest gating per D1, ubuntu advisory).
+
+Before it, eight PRs had merged with zero automated checks — including #15, which added the
+checkpoint store this pipeline's survivability depends on.
+
+Two things that surfaced while building it, both now fixed:
+
+- **The `example-vault` staleness check never checked anything.** It ran
+  `git diff --exit-code example_vault` *without* first running `vault upgrade`, so on a fresh
+  checkout the diff was empty by construction. `CLAUDE.md` had described the rule as
+  CI-enforced the entire time. The repo's one structural rule — `payload/` is the source of
+  truth, `example_vault/` is an artifact — was unenforced for as long as it had been written
+  down. It is now `tests/test_boundary.py::TestExampleVaultIsCurrent`.
+- **`vault check` cannot detect an un-laid-down payload edit.** `cmd_check` only compares the
+  stamp's `framework_version` against the installed version, so it exits 0 on a stale vault.
+  Several docs claimed otherwise. Two lanes: framework (cross-platform,
 pure stdlib) and pipeline (Windows runner, full deps).
 
 **4.6 Update `CLAUDE.md`.** It still opens *"This repo is the framework, not a vault"* and states a
@@ -313,19 +329,18 @@ these parts are now out of date:
 
 ## 8. If you do only one thing
 
-**§4.5 — set up GitHub Actions CI.** §4.1 (the previous answer to this question) is done for the
-part that mattered: a chunk failure now costs a chunk, not a document.
+**§4.2 — build and prove the offline dependency bundle.** It is the only remaining item with a
+hard deadline, and the only one whose failure mode is discovered on the far side of the gap.
+It must be built **on Windows** (`pip download` on macOS resolves the wrong wheels), it must be
+proven by installing on a clean machine **with networking disabled**, and stage 5 now cannot run
+at all without the YAP stack. `ingest-pipeline/requirements.txt` is the pip surface; the
+non-pip pieces are listed in §4.2 and at the bottom of that file.
 
-CI is now the biggest exposure. Seven PRs have merged with **zero automated checks** — including
-the one that added checkpointing. Everything reported in §2 comes from someone's local machine.
-Two lanes: framework (cross-platform, pure stdlib) and pipeline (Windows runner, full deps).
-Pair it with §4.4, because CI on a suite where 6 modules silently fail to import will go green on
-155 of 222 tests and nobody will notice.
+§4.1 (checkpointing) and §4.5 (CI) — the two previous answers to this question — are done.
 
-Runner-up, and the one with a hard deadline: **§4.2, the offline dependency bundle.** It must be
-built on Windows, it must be proven with networking disabled, and stage 5 now cannot run at all
-without the YAP stack. Nothing in the air gap works if that bundle is wrong, and you find out on
-the far side.
+> The very first Windows CI run is the moment to watch. Every pipeline test to date has only
+> ever run on macOS, so `pipeline.yml`'s gating job is the first real evidence the pipeline
+> works on the platform it ships on. Expect it to need attention rather than to be green.
 
 > Deps were installed on a Mac during the §4.1 work to get the suite fully green. Those are
 > **macOS arm64 wheels** (`pypdfium2-5.13.0-macosx_13_0_arm64`) — useful for local testing,

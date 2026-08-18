@@ -79,17 +79,7 @@ jobs:
       - run: pip install build && python -m build
       - name: payload made it into the wheel
         run: |
-          python - <<'PY'
-          import glob, sys, zipfile
-          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
-          payload = [f for f in names if "/payload/" in f]
-          print(f"{len(payload)} payload files")
-          for f in sorted(payload):
-              print("  ", f)
-          # A wheel without the payload installs cleanly and then fails at
-          # `vault scaffold`, which is the worst place to find out.
-          sys.exit(0 if len(payload) >= 8 else 1)
-          PY
+          python scripts/ci/check_wheel_payload.py
       - uses: actions/upload-artifact@v4
         with:
           name: wheel
