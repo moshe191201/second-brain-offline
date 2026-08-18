@@ -393,46 +393,5 @@ def verify_global_order(source_text: str, invariants: dict, translation: str) ->
     return verify_ordered(ordered_vals, translation)
 
 
-# ---------------------------------------------------------------------------
-# Person-name loading helpers — duplicated from translate.py so
-# `import translation_invariants as tmod` keeps tmod.load_person_names working
-# after the split (Task 7). Pure filesystem read, no cycle.
-# ---------------------------------------------------------------------------
-
-def load_codenames(vault_root: Path) -> set[str]:
-    """Load org codenames that must NOT be masked as person names."""
-    p = vault_root / "data" / "person_names" / "codenames.txt"
-    if not p.exists():
-        return set()
-    try:
-        return {line.strip() for line in p.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")}
-    except OSError:
-        return set()
-
-
-def load_person_names(vault_root: Path, exclude: set[str] | None = None) -> tuple[set[str], set[str]]:
-    first_p = vault_root / "data" / "person_names" / "first_names.txt"
-    last_p = vault_root / "data" / "person_names" / "last_names_ranked.txt"
-    if not first_p.exists():
-        raise RuntimeError(f"person name file missing: {first_p} — restore data/person_names/first_names.txt (593 names) — fail-closed")
-    if not last_p.exists():
-        raise RuntimeError(f"person name file missing: {last_p} — restore data/person_names/last_names_ranked.txt (818 names) — fail-closed")
-    first: set[str] = set()
-    last: set[str] = set()
-    for p, s in [(first_p, first), (last_p, last)]:
-        try:
-            for line in p.read_text(encoding="utf-8").splitlines():
-                t = line.strip()
-                if t:
-                    s.add(t)
-        except OSError as e:
-            raise RuntimeError(f"cannot read {p}: {e}") from e
-    if not first or not last:
-        raise RuntimeError(f"person name files empty: {first_p} ({len(first)}), {last_p} ({len(last)}) — expected 593 + 818, fail-closed")
-    codenames = load_codenames(vault_root)
-    if exclude:
-        codenames = codenames | exclude
-    if codenames:
-        first -= codenames
-        last -= codenames
-    return first, last
+# Person-name helpers — single source in translation_common.py
+from translation_common import load_codenames, load_person_names  # re-export for tmod import

@@ -116,3 +116,52 @@ def split_table_cells(row: str) -> list[str]:
 
 # Alias for translation_qa legacy name
 split_row_cells = split_table_cells
+
+
+def load_codenames(vault_root: Path) -> set[str]:
+    """Load org codenames that must NOT be masked as person names.
+
+    Codenames are Hebrew terms like ברק/דניאל that collide with common given names
+    but have English equivalents in the glossary and must be translated.
+    File: data/person_names/codenames.txt — one term per line, # comments ignored.
+    """
+    p = vault_root / "data" / "person_names" / "codenames.txt"
+    if not p.exists():
+        return set()
+    try:
+        return {line.strip() for line in p.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")}
+    except OSError:
+        return set()
+
+
+def load_person_names(vault_root: Path, exclude: set[str] | None = None) -> tuple[set[str], set[str]]:
+    """Load person-name allowlists (fail-closed).
+
+    Expects data/person_names/first_names.txt (593) and last_names_ranked.txt (818).
+    Raises RuntimeError if files missing/empty — empty guard would silently translate names.
+    """
+    first_p = vault_root / "data" / "person_names" / "first_names.txt"
+    last_p = vault_root / "data" / "person_names" / "last_names_ranked.txt"
+    if not first_p.exists():
+        raise RuntimeError(f"person name file missing: {first_p} — restore data/person_names/first_names.txt — fail-closed, refusing to run with empty guard")
+    if not last_p.exists():
+        raise RuntimeError(f"person name file missing: {last_p} — restore data/person_names/last_names_ranked.txt — fail-closed")
+    first: set[str] = set()
+    last: set[str] = set()
+    for p, s in [(first_p, first), (last_p, last)]:
+        try:
+            for line in p.read_text(encoding="utf-8").splitlines():
+                t = line.strip()
+                if t:
+                    s.add(t)
+        except OSError as e:
+            raise RuntimeError(f"cannot read {p}: {e}") from e
+    if not first or not last:
+        raise RuntimeError(f"person name files empty: {first_p} ({len(first)}), {last_p} ({len(last)}) — expected non-empty, fail-closed")
+    codenames = load_codenames(vault_root)
+    if exclude:
+        codenames = codenames | exclude
+    if codenames:
+        first -= codenames
+        last -= codenames
+    return first, last

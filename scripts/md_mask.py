@@ -55,7 +55,8 @@ def _split_table_cells(row: str) -> list[str]:
             from scripts.translation_common import split_table_cells as _shared
             return _shared(row)
         except ImportError:
-            pass
+            import warnings
+            warnings.warn("translation_common.split_table_cells not found — using inline fallback (drift risk)", stacklevel=2)
     parts: list[str] = []
     cur = ""
     i = 0
