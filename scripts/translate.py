@@ -343,6 +343,8 @@ def _translate_chunks_with_term_map(raw_text: str, first_names: set[str], last_n
             except FileNotFoundError as e:
                 raise RuntimeError(f"YAP required for glossary masking — fail-closed: {e}") from e
         use_mask = not no_mask
+        if use_mask and md_mask is None:
+            raise RuntimeError("md_mask missing — restore scripts/md_mask.py (table/placeholder masking required)")
         if use_mask:
             opts = md_mask.MdOptions(
                 translate_frontmatter=False,
