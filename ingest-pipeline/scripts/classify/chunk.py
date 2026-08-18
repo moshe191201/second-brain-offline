@@ -188,11 +188,21 @@ def main():
 
         h = content_hash(text)
         doc_id = f"{src.stem}__{h[:8]}"
+        # Derive source metadata for doc-type pruning (extension + original language)
+        # Extension from path; language from frontmatter if present, else empty (pruner treats empty as 'any' when no hard gate)
+        source_ext = src.suffix.lstrip(".").lower()
+        # Try to detect original language: frontmatter original_language or language, else empty
+        original_language = str(fm.get("original_language", fm.get("language", ""))).strip()
+        # Also check for 'lang' shorthand
+        if not original_language:
+            original_language = str(fm.get("lang", "")).strip()
         out_text = (
             f"---\n"
             f'source_doc_id: "{doc_id}"\n'
             f'source_hash: "{h}"\n'
             f'source_path: "{src.as_posix()}"\n'
+            f'source_ext: "{source_ext}"\n'
+            f'original_language: "{original_language}"\n'
             f'chunk_policy_version: "1"\n'
             f'chunk_mode: "{mode}"\n'
             f'chunk_window: {window}\n'
@@ -202,10 +212,20 @@ def main():
         )
         # Content-addressed path: store/ab/abcdef...md
         out_path = store_root / h[:2] / f"{h}.md"
+        meta_path = out_path.with_suffix(".meta.json")
         if args.dry_run:
             print(f"[dry-run] {src} -> {out_path} ({len(chunk_body)} chars, ~{estimate_tokens(chunk_body)} tokens, mode={mode})")
         else:
             atomic_write(out_path, out_text)
+            # Sidecar for doc-type pruner
+            meta = {
+                "source_path": src.as_posix(),
+                "source_ext": source_ext,
+                "original_language": original_language,
+                "title": title,
+                "source_hash": h,
+            }
+            atomic_write(meta_path, json.dumps(meta, indent=2))
             print(f"chunk: {src} -> {out_path} (mode={mode}, window={window})")
     return 0
 

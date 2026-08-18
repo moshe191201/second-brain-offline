@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "second-brain-vault-framework"
-version = "0.1.0"
+version = "0.2.0"
 description = "Tool + payload that builds, lints, and upgrades AI-operable knowledge vaults — offline and air-gap ready."
 readme = "README.md"
 requires-python = ">=3.11"
