@@ -34,33 +34,12 @@ except ImportError:  # direct script run (python scripts/classify/x.py)
     from taxonomy import TAXONOMY_RE as _TAXONOMY_RE, parse_taxonomy_blocks as _parse_taxonomy_blocks, templates_root as _templates_root
     from taxonomy import parse_doc_types_blocks as _parse_doctype_blocks
 
-
-def parse_frontmatter(text: str) -> tuple[dict, str]:
-    """Minimal YAML-subset parser: top-level scalars and simple `- ` lists."""
-    if not text.startswith("---"):
-        return {}, text
-    lines = text.splitlines()
-    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
-    if end is None:
-        return {}, text
-    fm: dict = {}
-    current_key = None
-    for raw in lines[1:end]:
-        if re.match(r"^\s*-\s+", raw) and current_key is not None:
-            fm.setdefault(current_key, [])
-            if isinstance(fm[current_key], list):
-                fm[current_key].append(raw.strip()[2:].strip().strip('"'))
-            continue
-        m = re.match(r"^([A-Za-z0-9_-]+):\s*(.*)$", raw)
-        if m:
-            key, val = m.group(1), m.group(2).strip()
-            current_key = key
-            if val == "":
-                fm[key] = []  # may become a list on following `- ` lines
-            else:
-                fm[key] = val.strip('"')
-    body = "\n".join(lines[end + 1:])
-    return fm, body
+import importlib.util as _ilu_v2
+_cc_v_path = Path(__file__).resolve().parent / "classify_common.py"
+_spec_v2 = _ilu_v2.spec_from_file_location("_cc_v", _cc_v_path)
+_mod_v2 = _ilu_v2.module_from_spec(_spec_v2)
+_spec_v2.loader.exec_module(_mod_v2)  # type: ignore
+parse_frontmatter = _mod_v2.parse_frontmatter
 
 
 def _load_taxonomy_subdomains(campaign: Path, root: Path) -> set[str]:
