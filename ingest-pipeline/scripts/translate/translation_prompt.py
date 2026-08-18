@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 import re
 
-from translation_chunking import chunk_markdown, glossary_for_chunk
-from translation_invariants import extract_preservation_invariants
+from .translation_chunking import chunk_markdown, glossary_for_chunk
+from .translation_invariants import extract_preservation_invariants
 
 
 def build_prompt(chunk_text: str, section_path: str, glossary_rows: list[dict],
@@ -23,11 +23,11 @@ def build_prompt(chunk_text: str, section_path: str, glossary_rows: list[dict],
                 keep = e.get("keep_source", False)
                 is_keep = keep is True or keep == 1 or str(keep) == "1"
                 if is_keep:
-                    from translation_common import build_keep_sentinel
+                    from .translation_common import build_keep_sentinel
                     sentinel = build_keep_sentinel(term_he)
                     lines.append(f"  - {sentinel} ← {term_he} (keep as Hebrew, appears {occ}×)")
                 else:
-                    from translation_common import build_glossary_sentinel
+                    from .translation_common import build_glossary_sentinel
                     tid = e.get("id", 0)
                     try:
                         tid_int = int(tid)
@@ -145,11 +145,11 @@ def build_fix_prompt(source_text: str, prev_translation: str, failures: list[dic
                 keep = e.get("keep_source", False)
                 is_keep = keep is True or keep == 1 or str(keep) == "1"
                 if is_keep:
-                    from translation_common import build_keep_sentinel
+                    from .translation_common import build_keep_sentinel
                     sentinel = build_keep_sentinel(term_he)
                     lines.append(f"  - {sentinel} ← {term_he} (keep as Hebrew, appears {occ}×)")
                 else:
-                    from translation_common import build_glossary_sentinel
+                    from .translation_common import build_glossary_sentinel
                     tid = e.get("id", 0)
                     try:
                         tid_int = int(tid)
