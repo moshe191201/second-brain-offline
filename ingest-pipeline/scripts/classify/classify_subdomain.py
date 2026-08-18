@@ -3,8 +3,5 @@
 import sys
 
 if __name__ == "__main__":
-    try:
-        from judge import main
-    except ImportError:
-        from scripts.classify.judge import main  # type: ignore
+    from judge import main
     sys.exit(main())

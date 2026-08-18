@@ -32,10 +32,7 @@ try:  # package import (from classify.x import ...)
     from .taxonomy import parse_doc_types_blocks as _parse_doctype_blocks
 except ImportError:  # direct script run (python scripts/classify/x.py)
     from taxonomy import TAXONOMY_RE as _TAXONOMY_RE, parse_taxonomy_blocks as _parse_taxonomy_blocks, templates_root as _templates_root
-    try:
-        from taxonomy import parse_doc_types_blocks as _parse_doctype_blocks
-    except ImportError:
-        _parse_doctype_blocks = None  # type: ignore
+    from taxonomy import parse_doc_types_blocks as _parse_doctype_blocks
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:

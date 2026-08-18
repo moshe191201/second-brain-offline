@@ -8,9 +8,5 @@ if __name__ == "__main__":
     if "--doctype" not in argv:
         argv = ["--doctype"] + argv
     sys.argv = [sys.argv[0]] + argv
-    # Import judge main after adjusting argv
-    try:
-        from judge import main
-    except ImportError:
-        from scripts.classify.judge import main  # type: ignore
+    from judge import main
     sys.exit(main())

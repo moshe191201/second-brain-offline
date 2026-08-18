@@ -56,19 +56,8 @@ def main():
             dt_path = _templates_root() / "doc_types.yaml"
         subs = []
         if dt_path.exists():
-            try:
-                # Use taxonomy helper if available
-                try:
-                    from .taxonomy import parse_doc_types_blocks as _pdtb
-                except ImportError:
-                    from taxonomy import parse_doc_types_blocks as _pdtb
-                subs = list(_pdtb(dt_path.read_text(encoding="utf-8")).keys())
-            except Exception:
-                # Fallback regex
-                for m in re.finditer(r"^\s{2}([\w-]+):\s*(?:\n|$)", dt_path.read_text(encoding="utf-8"), flags=re.MULTILINE):
-                    n = m.group(1)
-                    if n not in ("doc_types", "version", "campaign", "routing_defaults", "chunk", "retrieval", "judge", "confidence", "relation", "review"):
-                        subs.append(n)
+            from taxonomy import parse_doc_types_blocks as _pdtb
+            subs = list(_pdtb(dt_path.read_text(encoding="utf-8")).keys())
     else:
         tax_path = camp / "taxonomy.yaml"
         if not tax_path.exists():

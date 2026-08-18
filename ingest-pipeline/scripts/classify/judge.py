@@ -26,14 +26,8 @@ try:  # package import (from classify.x import ...)
     from .taxonomy import effective_doc_type_candidates as _effective_candidates, singleton_pruned_type as _singleton_type
 except ImportError:  # direct script run (python scripts/classify/x.py)
     from taxonomy import TAXONOMY_RE as _TAXONOMY_RE, parse_taxonomy_blocks as _parse_blocks, templates_root
-    try:
-        from taxonomy import parse_doc_types_blocks as _parse_doctype_blocks, load_doc_types as _load_doc_types
-        from taxonomy import effective_doc_type_candidates as _effective_candidates, singleton_pruned_type as _singleton_type
-    except ImportError:
-        _parse_doctype_blocks = None  # type: ignore
-        _load_doc_types = None  # type: ignore
-        _effective_candidates = None  # type: ignore
-        _singleton_type = None  # type: ignore
+    from taxonomy import parse_doc_types_blocks as _parse_doctype_blocks, load_doc_types as _load_doc_types
+    from taxonomy import effective_doc_type_candidates as _effective_candidates, singleton_pruned_type as _singleton_type
 
 
 def load_yaml_simple(path: Path):

@@ -19,26 +19,10 @@ from pathlib import Path
 import sys
 import urllib.request, urllib.error
 
+from taxonomy import parse_taxonomy_blocks, parse_doc_types_blocks, effective_doc_type_candidates, load_doc_types, templates_root
+from classify_common import cosine, hash_embed
+
 TOP_K_MIN, TOP_K_MAX = 1, 10
-
-
-def cosine(a, b):
-    dot = sum(x*y for x,y in zip(a,b))
-    na = math.sqrt(sum(x*x for x in a))
-    nb = math.sqrt(sum(x*x for x in b))
-    if na == 0 or nb == 0:
-        return 0.0
-    return dot / (na * nb)
-
-
-def hash_embed(text: str, dim=64):
-    # Deterministic stub for tests / offline: hash words into vector
-    vec = [0.0]*dim
-    for w in re.findall(r"\w+", text.lower())[:200]:
-        h = int(hashlib.sha256(w.encode()).hexdigest(), 16)
-        vec[h % dim] += 1.0
-    n = math.sqrt(sum(x*x for x in vec)) or 1.0
-    return [x/n for x in vec]
 
 
 def call_embeddings(texts, base_url, api_key, model):
@@ -54,33 +38,13 @@ def call_embeddings(texts, base_url, api_key, model):
 
 
 def _templates_root_lazy(filename: str):
-    try:
-        from .taxonomy import templates_root
-    except ImportError:
-        from taxonomy import templates_root
     return templates_root() / filename
 
 
 def load_taxonomy(path: Path):
     txt = path.read_text(encoding="utf-8")
     subs = {}
-    try:
-        try:
-            from .taxonomy import parse_taxonomy_blocks
-        except ImportError:
-            from taxonomy import parse_taxonomy_blocks
-        blocks = parse_taxonomy_blocks(txt)
-    except Exception:
-        _local_re = re.compile(r"^\s{2}([\w-]+):\s*(?:\n|$)", re.MULTILINE)
-        matches = list(_local_re.finditer(txt))
-        blocks = {}
-        for i, m in enumerate(matches):
-            name = m.group(1)
-            if name in ("subdomains", "version", "campaign"):
-                continue
-            start = m.end()
-            end = matches[i + 1].start() if i + 1 < len(matches) else len(txt)
-            blocks[name] = txt[start:end]
+    blocks = parse_taxonomy_blocks(txt)
     for name, block in blocks.items():
         # Support text: "quoted", text: 'single', text: | multiline (first line)
         examples = re.findall(r'text:\s*"(.*?)"', block)
@@ -94,36 +58,8 @@ def load_taxonomy(path: Path):
 
 def load_doc_types_tolerant(path: Path):
     """Load doc_types examples dict from a doc_types.yaml path, tolerant of structure."""
-    try:
-        try:
-            from .taxonomy import load_doc_types
-        except ImportError:
-            from taxonomy import load_doc_types
-        _txt, mapping = load_doc_types(path)
-        # mapping is {name: {definition, examples, block}}
-        return {k: v.get("examples", []) for k, v in mapping.items()}, _txt
-    except Exception:
-        pass
-    # Fallback simple regex
-    txt = path.read_text(encoding="utf-8") if path.exists() else ""
-    subs = {}
-    import re as _re
-    blocks = {}
-    _re_tax = re.compile(r"^\s{2}([\w-]+):\s*(?:\n|$)", re.MULTILINE)
-    matches = list(_re_tax.finditer(txt))
-    for i, m in enumerate(matches):
-        name = m.group(1)
-        if name in ("doc_types", "version", "campaign", "routing_defaults", "chunk", "retrieval", "judge", "confidence", "relation", "review"):
-            continue
-        start = m.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(txt)
-        block = txt[start:end]
-        if "definition:" in block or "ephemeral:" in block:
-            blocks[name] = block
-    for name, block in blocks.items():
-        exs = re.findall(r'text:\s*"(.*?)"', block)
-        subs[name] = exs
-    return subs, txt
+    _txt, mapping = load_doc_types(path)
+    return {k: v.get("examples", []) for k, v in mapping.items()}, _txt
 
 
 def main():
@@ -149,14 +85,7 @@ def main():
         subs, raw_txt = load_doc_types_tolerant(vocab_path)
         # Keep raw_txt for pruning via blocks parsed separately
         # Parse blocks for pruning (need block strings)
-        try:
-            try:
-                from .taxonomy import parse_doc_types_blocks
-            except ImportError:
-                from taxonomy import parse_doc_types_blocks
-            blocks = parse_doc_types_blocks(raw_txt)
-        except Exception:
-            blocks = {}
+        blocks = parse_doc_types_blocks(raw_txt)
     else:
         tax_path = Path(args.campaign) / "taxonomy.yaml"
         if not tax_path.exists():
@@ -220,16 +149,7 @@ def main():
         return 1
 
     # For doctype pruning we need helper
-    prune_fn = None
-    if args.doctype and blocks:
-        try:
-            try:
-                from .taxonomy import effective_doc_type_candidates
-            except ImportError:
-                from taxonomy import effective_doc_type_candidates
-            prune_fn = effective_doc_type_candidates
-        except Exception:
-            prune_fn = None
+    prune_fn = effective_doc_type_candidates
 
     for doc in docs[:1000]:  # cap per run
         # Prune before embedding: effective candidates based on metadata
