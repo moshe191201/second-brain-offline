@@ -85,6 +85,7 @@ except ModuleNotFoundError:
 
 from translation_checkpoint import (
     chunk_checkpoint_key, load_chunk_checkpoint, save_chunk_checkpoint,
+    pipeline_code_fingerprint, names_fingerprint,
 )
 from translation_invariants import (
     PERSON_OPEN, PERSON_CLOSE, EN_OPEN, EN_CLOSE, HE_MARKER_FMT,
@@ -300,11 +301,14 @@ def _glossary_fingerprint(glossary: list[dict]) -> str:
     Part of the chunk checkpoint key: editing the glossary must invalidate every
     cached chunk, because masking and the injected term list both change.
     """
-    rows = sorted(
+    # NOT sorted: mask_glossary_terms assigns sentinel ids positionally
+    # (gid = len(glossary_entries)), so those ids reach the prompt, the ledger
+    # term_map, and — when two rows share a YAP root — which English wins.
+    rows = [
         (str(r.get("term_he", "")), str(r.get("english", "")),
          str(r.get("keep_source", "")), str(r.get("status", "")))
         for r in glossary
-    )
+    ]
     return hashlib.sha256(json.dumps(rows, ensure_ascii=False).encode()).hexdigest()[:16]
 
 
@@ -561,6 +565,8 @@ def _translate_chunks_with_term_map(raw_text: str, first_names: set[str], last_n
     # Aggregated term_map keyed by (term_he, english, keep_source) with summed occurrences
     agg_term_map: dict[tuple[str, str, bool], dict] = {}
     glossary_fp = _glossary_fingerprint(glossary) if out_root is not None else ""
+    names_fp = names_fingerprint(first_names, last_names) if out_root is not None else ""
+    code_fp = pipeline_code_fingerprint() if out_root is not None else ""
     reused = 0
     prev_tail = ""
     for ch in chunks:
@@ -570,7 +576,8 @@ def _translate_chunks_with_term_map(raw_text: str, first_names: set[str], last_n
         payload = None
         if out_root is not None:
             key = chunk_checkpoint_key(chunk_text, section_path, prev_tail,
-                                       glossary_fp, model, mock, no_mask)
+                                       glossary_fp, model, mock, no_mask,
+                                       names_fp, code_fp)
             if not force:
                 payload = load_chunk_checkpoint(out_root, key)
                 if payload is not None:
@@ -582,9 +589,12 @@ def _translate_chunks_with_term_map(raw_text: str, first_names: set[str], last_n
             if key is not None:
                 try:
                     save_chunk_checkpoint(out_root, key, payload)
-                except OSError as e:
+                except (OSError, ValueError, TypeError) as e:
                     # A store we cannot write to must not abort a run that is
-                    # otherwise succeeding; it only costs resumability.
+                    # otherwise succeeding; it only costs resumability. ValueError
+                    # covers UnicodeEncodeError from a lone surrogate in an LLM
+                    # response, which is not an OSError and which main() — guarding
+                    # only RuntimeError — would otherwise let end the whole batch.
                     print(f"warn: cannot checkpoint chunk [{section_path}]: {e}", file=sys.stderr)
 
         trans = payload["translation"]

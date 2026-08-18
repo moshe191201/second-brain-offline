@@ -20,7 +20,8 @@ class TestChunkCheckpointKey(unittest.TestCase):
         from translation_checkpoint import chunk_checkpoint_key
         kw = dict(chunk_text="שלום עולם", section_path="# H", prev_tail="",
                   glossary_fingerprint="abc123", model="minimax-m2.7",
-                  mock=False, no_mask=False)
+                  mock=False, no_mask=False, names_fingerprint="names0",
+                  code_fingerprint="code0")
         kw.update(over)
         return chunk_checkpoint_key(**kw)
 
@@ -41,9 +42,24 @@ class TestChunkCheckpointKey(unittest.TestCase):
     def test_mock_output_never_collides_with_real_output(self):
         self.assertNotEqual(self._key(mock=False), self._key(mock=True))
 
+    def test_key_changes_when_the_person_name_lists_change(self):
+        # The curated lists reach the prompt and the preservation checks.
+        self.assertNotEqual(self._key(), self._key(names_fingerprint="names1"))
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_key_changes_when_the_pipeline_code_changes(self):
+        # Editing a prompt mid-corpus must not leave a document stitched together
+        # from two generations of the pipeline.
+        self.assertNotEqual(self._key(), self._key(code_fingerprint="code1"))
+
+    def test_every_key_input_is_required(self):
+        # Fail-closed: a forgotten input silently reuses chunks produced under
+        # different rules, and the cached output looks perfectly well-formed.
+        import inspect
+        from translation_checkpoint import chunk_checkpoint_key
+        defaults = [n for n, prm in inspect.signature(chunk_checkpoint_key).parameters.items()
+                    if prm.default is not inspect.Parameter.empty]
+        self.assertEqual(defaults, [])
+
 
 
 class TestChunkCheckpointStore(unittest.TestCase):
@@ -431,3 +447,182 @@ class TestLargeDocumentSurvival(unittest.TestCase):
         full, _u, _n, _t = self._run(self._llm())
         self.assertEqual(full.split("\n\n"),
                          [f"EN chunk {i}" for i in range(1, self.N_CHUNKS + 1)])
+
+class TestPersonNameGuardAcrossResume(unittest.TestCase):
+    """The curated person-name lists are edited between runs — name_candidates.txt
+    exists so the operator can feed names back in. If the name sets are not part of
+    the checkpoint key, a resumed run replays chunks that never saw the new names
+    and the guard silently fails *open*."""
+
+    DOC = "# פרק א\nדנה כהן כתבה את המסמך הזה\n"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.out_root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _run(self, first, last, out_root=None):
+        import translate
+        import unittest.mock as mock
+        cands: set[str] = set()
+        fake = lambda *a, **kw: {"translation": "EN body", "unknown_terms": [], "notes": []}
+        with mock.patch("translate.call_llm", side_effect=fake):
+            full, unknown, notes, tm = translate._translate_chunks_with_term_map(
+                raw_text=self.DOC, first_names=first, last_names=last, glossary=[],
+                base_url="http://x", api_key="k", model="m", mock=False,
+                chunk_chars=6000, no_mask=True, name_candidates=cands,
+                out_root=out_root or self.out_root, chunk_retries=0)
+        return {"unknown": unknown, "notes": notes, "candidates": cands}
+
+    def test_adding_person_names_invalidates_cached_chunks(self):
+        self._run(set(), set())                                   # populate store
+        resumed = self._run({"דנה"}, {"כהן"})                      # same store
+        fresh = self._run({"דנה"}, {"כהן"},
+                          out_root=Path(tempfile.mkdtemp(dir=self._tmp.name)))
+        self.assertEqual(resumed["unknown"], fresh["unknown"])
+        self.assertEqual(resumed["candidates"], fresh["candidates"])
+        self.assertEqual(resumed["notes"], fresh["notes"])
+
+    def test_the_dropped_name_is_actually_detected_on_a_fresh_run(self):
+        # Guards the test above: if this stops flagging the name, the comparison
+        # would pass vacuously.
+        fresh = self._run({"דנה"}, {"כהן"})
+        self.assertIn("דנה כהן", fresh["candidates"])
+        self.assertIn("דנה כהן", fresh["unknown"])
+
+
+class TestGlossaryFingerprintOrder(unittest.TestCase):
+    def test_reordering_the_glossary_changes_the_fingerprint(self):
+        # mask_glossary_terms assigns sentinel ids positionally (gid = len(entries)),
+        # so row order reaches the prompt, the ledger term_map, and — for two rows
+        # sharing a YAP root — which English rendering wins.
+        import translate
+        a = {"term_he": "מערכת", "english": "system", "status": "approved", "keep_source": "0"}
+        b = {"term_he": "תהליך", "english": "process", "status": "approved", "keep_source": "0"}
+        self.assertNotEqual(translate._glossary_fingerprint([a, b]),
+                            translate._glossary_fingerprint([b, a]))
+
+    def test_identical_order_gives_identical_fingerprint(self):
+        import translate
+        a = {"term_he": "מערכת", "english": "system", "status": "approved", "keep_source": "0"}
+        self.assertEqual(translate._glossary_fingerprint([a]), translate._glossary_fingerprint([a]))
+
+
+class TestCheckpointRobustness(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.out_root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def test_checkpoint_without_a_translation_is_a_miss(self):
+        # A dict from an older payload shape parses fine as JSON. Returning it lets
+        # the caller raise KeyError, which main() does not catch (it guards only
+        # RuntimeError) — one stale file would end the whole 3,800-page run.
+        from translation_checkpoint import save_chunk_checkpoint, load_chunk_checkpoint
+        save_chunk_checkpoint(self.out_root, "aa11", {"note": "older payload shape"})
+        self.assertIsNone(load_chunk_checkpoint(self.out_root, "aa11"))
+
+    def test_checkpoint_with_non_string_translation_is_a_miss(self):
+        from translation_checkpoint import save_chunk_checkpoint, load_chunk_checkpoint
+        save_chunk_checkpoint(self.out_root, "aa22", {"translation": ["not", "a", "string"]})
+        self.assertIsNone(load_chunk_checkpoint(self.out_root, "aa22"))
+
+    def test_checkpoint_with_malformed_term_map_is_a_miss(self):
+        # The caller does e["term_he"] unguarded while aggregating.
+        from translation_checkpoint import save_chunk_checkpoint, load_chunk_checkpoint
+        save_chunk_checkpoint(self.out_root, "aa33",
+                              {"translation": "ok", "term_map": [{"english": "system"}]})
+        self.assertIsNone(load_chunk_checkpoint(self.out_root, "aa33"))
+
+    def test_json_list_checkpoint_is_a_miss(self):
+        from translation_checkpoint import chunk_checkpoint_path, load_chunk_checkpoint
+        p = chunk_checkpoint_path(self.out_root, "aa44")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('["not", "a", "dict"]', encoding="utf-8")
+        self.assertIsNone(load_chunk_checkpoint(self.out_root, "aa44"))
+
+    def test_unserialisable_payload_does_not_escape_as_a_crash(self):
+        # A lone surrogate in an LLM response makes json.dump raise UnicodeEncodeError,
+        # which is a ValueError — not an OSError — so it escaped the caller's guard
+        # and main()'s RuntimeError guard, killing the batch.
+        from translation_checkpoint import save_chunk_checkpoint
+        with self.assertRaises((OSError, ValueError, TypeError)):
+            save_chunk_checkpoint(self.out_root, "aa55", {"translation": "bad \ud83d surrogate"})
+        self.assertEqual([p for p in self.out_root.rglob("*") if p.is_file()], [])
+
+
+class TestPipelineCodeFingerprint(unittest.TestCase):
+    def _dir(self):
+        from translation_checkpoint import _CODE_FINGERPRINT_MODULES
+        d = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        for name in _CODE_FINGERPRINT_MODULES:
+            (d / name).write_text(f"# {name}\n", encoding="utf-8")
+        return d
+
+    def test_same_source_gives_same_fingerprint(self):
+        from translation_checkpoint import pipeline_code_fingerprint
+        d = self._dir()
+        self.assertEqual(pipeline_code_fingerprint(d), pipeline_code_fingerprint(d))
+
+    def test_editing_a_tracked_module_changes_the_fingerprint(self):
+        from translation_checkpoint import pipeline_code_fingerprint
+        d = self._dir()
+        before = pipeline_code_fingerprint(d)
+        (d / "translation_prompt.py").write_text("# changed rules\n", encoding="utf-8")
+        self.assertNotEqual(before, pipeline_code_fingerprint(d))
+
+    def test_a_missing_module_still_yields_a_fingerprint(self):
+        # A partial checkout degrades to a coarser digest rather than an exception,
+        # and the digest still changes — the fail-safe direction.
+        from translation_checkpoint import pipeline_code_fingerprint
+        d = self._dir()
+        before = pipeline_code_fingerprint(d)
+        (d / "md_mask.py").unlink()
+        after = pipeline_code_fingerprint(d)
+        self.assertNotEqual(before, after)
+        self.assertEqual(len(after), 16)
+
+    def test_the_real_pipeline_fingerprint_is_computable(self):
+        from translation_checkpoint import pipeline_code_fingerprint
+        self.assertEqual(len(pipeline_code_fingerprint()), 16)
+
+
+class TestNamesFingerprint(unittest.TestCase):
+    def test_adding_a_name_changes_the_fingerprint(self):
+        from translation_checkpoint import names_fingerprint
+        self.assertNotEqual(names_fingerprint({"דנה"}, set()),
+                            names_fingerprint({"דנה", "יוסי"}, set()))
+
+    def test_first_and_last_lists_are_distinguished(self):
+        from translation_checkpoint import names_fingerprint
+        self.assertNotEqual(names_fingerprint({"כהן"}, set()),
+                            names_fingerprint(set(), {"כהן"}))
+
+    def test_set_iteration_order_does_not_matter(self):
+        from translation_checkpoint import names_fingerprint
+        self.assertEqual(names_fingerprint({"א", "ב", "ג"}, set()),
+                         names_fingerprint({"ג", "ב", "א"}, set()))
+
+
+class TestUnwritableStoreDoesNotKillTheRun(unittest.TestCase):
+    def test_a_serialisation_failure_degrades_to_a_warning(self):
+        # main() guards only RuntimeError, so anything else escaping the save
+        # ends the batch over the remaining corpus.
+        import translate
+        import unittest.mock as mock
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        boom = UnicodeEncodeError("utf-8", "x", 0, 1, "surrogates not allowed")
+        with mock.patch("translate.save_chunk_checkpoint", side_effect=boom):
+            with mock.patch("translate.call_llm", side_effect=_fake_llm()):
+                full, _u, _n, _t = translate._translate_chunks_with_term_map(
+                    raw_text=_THREE_CHUNK_DOC, first_names=set(), last_names=set(),
+                    glossary=[], base_url="http://x", api_key="k", model="m",
+                    mock=False, chunk_chars=6000, no_mask=True, name_candidates=None,
+                    out_root=Path(tmp.name), chunk_retries=0)
+        self.assertEqual(full, "EN-A\n\nEN-B\n\nEN-C")
+
+
+if __name__ == "__main__":
+    unittest.main()
