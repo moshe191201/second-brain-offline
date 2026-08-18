@@ -1,0 +1,75 @@
+# Pipeline lane — ingest-pipeline/.
+#
+# Windows-first on purpose. D1: every machine in the project and in the air gap
+# is Windows, `yap.exe` and its lookup are written for it, and a green Linux run
+# would prove nothing about the platform this actually ships on.
+#
+# Ubuntu runs alongside as a cheap, NON-BLOCKING second opinion: it catches
+# genuine logic regressions in minutes while the Windows job installs, but a
+# Linux-only failure is explicitly not a bug under D1, so it must never gate a
+# merge.
+#
+# This lane installs ~11 packages. That is fine here and forbidden in the
+# framework lane — the two products have different rules on purpose.
+
+name: pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: ingest-pipeline
+
+jobs:
+  windows:
+    name: tests (windows, py3.12)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ingest-pipeline/requirements.txt
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt
+
+      # YAP is not pip-installable and does not come through the bundle here, so
+      # YAP_DIR stays unset and the YAP-dependent tests skip with a remediation
+      # message rather than erroring. Expect 2 skips; see HANDOFF.md §4.2.
+      - name: Run pipeline suite
+        run: python -m unittest discover -s tests -v
+
+      # The pipeline entry points are what an operator actually types. An import
+      # error in one of them is invisible to the unit tests.
+      - name: Entry points are runnable
+        shell: bash
+        run: |
+          for s in convert_to_md.py extract_domain_terms.py translate.py \
+                   classify/judge.py classify/validate.py \
+                   classify/retrieve.py classify/export_label_studio.py; do
+            printf '  %-38s' "$s"
+            python "scripts/$s" --help > /dev/null 2>&1 && echo OK || { echo FAILED; exit 1; }
+          done
+
+  linux:
+    name: tests (ubuntu, py3.12) — advisory
+    runs-on: ubuntu-latest
+    # D1 makes Linux explicitly unsupported. This is signal, never a gate.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ingest-pipeline/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
