@@ -114,5 +114,67 @@ class TestManifestMatchesPayload(unittest.TestCase):
         self.assertEqual(missing, [], "owned but not shipped — upgrade would never install it")
 
 
+
+class TestExampleVaultIsCurrent(unittest.TestCase):
+    """`payload/` is the source of truth; `example_vault/` is an artifact.
+
+    CLAUDE.md has long claimed CI enforced this. It did not: the `example-vault`
+    job ran `vault check` and then `git diff --exit-code`, without ever running
+    `vault upgrade` — and on a fresh CI checkout that diff is trivially empty, so
+    the check could never detect a stale example. A payload edit that was never
+    laid down would have reached a consumer's repo before it failed here.
+
+    Done as a temp-directory copy rather than by upgrading the real example and
+    diffing: `.vault-framework.json` carries an `installed_at` wall-clock stamp
+    rewritten on every upgrade, so a naive diff is red on every run regardless of
+    drift.
+    """
+
+    _VOLATILE = ("installed_at",)
+
+    def test_upgrading_example_vault_would_change_nothing(self):
+        import shutil
+        import tempfile
+        from second_brain_vault_framework import core
+
+        example = ROOT / "example_vault"
+        self.assertTrue(example.is_dir(), "example_vault/ missing")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / "example_vault"
+            shutil.copytree(example, copy)
+            rc = core.cmd_upgrade(copy)
+            self.assertEqual(rc, 0, "vault upgrade failed on example_vault")
+
+            drifted = []
+            for after in sorted(copy.rglob("*")):
+                if not after.is_file():
+                    continue
+                rel = after.relative_to(copy)
+                before = example / rel
+                if not before.exists():
+                    drifted.append(f"{rel} (upgrade would ADD it)")
+                    continue
+                a, b = after.read_bytes(), before.read_bytes()
+                if a == b:
+                    continue
+                if rel.name == ".vault-framework.json":
+                    ja, jb = json.loads(a), json.loads(b)
+                    for k in self._VOLATILE:
+                        ja.pop(k, None)
+                        jb.pop(k, None)
+                    if ja != jb:
+                        drifted.append(f"{rel} (stamp/manifest drift)")
+                    continue
+                drifted.append(f"{rel} (upgrade would CHANGE it)")
+
+            for before in sorted(example.rglob("*")):
+                if before.is_file() and not (copy / before.relative_to(example)).exists():
+                    drifted.append(f"{before.relative_to(example)} (upgrade would REMOVE it)")
+
+            self.assertEqual(
+                drifted, [],
+                "example_vault is stale — run `vault upgrade example_vault` and commit")
+
 if __name__ == "__main__":
     unittest.main()

@@ -42,8 +42,11 @@ example-vault:
   stage: example
   script:
     - vault check example_vault
-    - git diff --exit-code example_vault
-      || (echo "example_vault is stale — run 'vault upgrade example_vault' and commit." && exit 1)
+    # The staleness check used to live here as `git diff --exit-code`, which
+    # never ran `vault upgrade` first — so on a fresh checkout the diff was
+    # always empty and the job could not detect a stale example. It is now
+    # tests/test_boundary.py::TestExampleVaultIsCurrent, run by the `unit` job.
+
 
 wheel:
   stage: build

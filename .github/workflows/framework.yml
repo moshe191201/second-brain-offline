@@ -50,15 +50,16 @@ jobs:
       - run: pip install -e .
 
       # example_vault/ is living documentation: it must always be the vault the
-      # *current* payload produces. A payload edit that was never laid down is a
-      # broken build, and it should fail here rather than in a consumer's repo.
+      # *current* payload produces.
+      #
+      # The staleness check itself lives in tests/test_boundary.py, not here. It
+      # upgrades a temp COPY and compares: `.vault-framework.json` carries an
+      # `installed_at` wall-clock stamp rewritten on every upgrade, so the
+      # obvious `vault upgrade && git diff --exit-code` is red on every run
+      # whether or not anything drifted. As a test it also runs on a laptop,
+      # which is where a stale example should be caught.
       - name: vault check
         run: vault check example_vault
-      - name: example_vault is not stale
-        run: |
-          vault upgrade example_vault
-          git diff --exit-code example_vault \
-            || (echo "::error::example_vault is stale — run 'vault upgrade example_vault' and commit."; exit 1)
 
       # Prove a fresh vault can actually be built end to end, not just linted.
       - name: scaffold a fresh vault and lint it
