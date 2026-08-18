@@ -26,19 +26,6 @@ except ImportError:  # direct script run (python scripts/classify/x.py)
     from taxonomy import TAXONOMY_RE as _TAXONOMY_RE, parse_taxonomy_blocks as _parse_blocks, templates_root
 
 
-def _local_parse_blocks(txt: str) -> dict[str, str]:
-    matches = list(_TAXONOMY_RE.finditer(txt))
-    blocks: dict[str, str] = {}
-    for i, m in enumerate(matches):
-        name = m.group(1)
-        if name in ("subdomains", "version", "campaign"):
-            continue
-        start = m.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(txt)
-        blocks[name] = txt[start:end]
-    return blocks
-
-
 def load_yaml_simple(path: Path):
     if not path.exists():
         return "", {}

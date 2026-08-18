@@ -170,6 +170,63 @@ class TestCoreClassifyValidator(unittest.TestCase):
             self.assertNotEqual(rc, 0)
 
 
+    def test_successful_classification_patches_and_writes_ledger(self):
+        # Both other validator tests assert rc != 0 on rejection paths, so the
+        # success path -- frontmatter patch AND ledger append -- was never run.
+        with tempfile.TemporaryDirectory() as d:
+            v = Path(d) / "V"
+            v.mkdir()
+            camp = v / "campaigns" / "test"
+            camp.mkdir(parents=True)
+            import shutil
+            shutil.copy(TEMPLATES / "taxonomy.yaml", camp / "taxonomy.yaml")
+            store = v / "store"
+            store.mkdir()
+            (store / "ok.judge.json").write_text(json.dumps({
+                "reasoning_brief": "clearly a cardiology document about heart rhythm",
+                "primary_subdomain": "cardiology",
+                "confidence_bucket": "SURE",
+                "relation_type": "none",
+                "secondary_subdomains": [],
+            }), encoding="utf-8")
+            (store / "ok.md").write_text("---\ntitle: t\n---\nbody", encoding="utf-8")
+
+            rc = validate.cmd_classify(v, campaign=Path("campaigns/test"), store=Path("store"))
+
+            self.assertEqual(rc, 0, "a valid judge file must classify cleanly")
+            patched = (store / "ok.md").read_text(encoding="utf-8")
+            self.assertIn("cardiology", patched)
+            ledgers = list(v.rglob("ledger.jsonl"))
+            self.assertTrue(ledgers, "a successful classification must append a ledger event")
+            entry = json.loads(ledgers[0].read_text(encoding="utf-8").strip().split("\n")[0])
+            self.assertIn("timestamp", entry)
+
+    def test_success_path_is_idempotent(self):
+        # The rerun guard reads the ledger; if the ledger write dies the doc is
+        # re-patched on every run and never converges.
+        with tempfile.TemporaryDirectory() as d:
+            v = Path(d) / "V"
+            v.mkdir()
+            camp = v / "campaigns" / "test"
+            camp.mkdir(parents=True)
+            import shutil
+            shutil.copy(TEMPLATES / "taxonomy.yaml", camp / "taxonomy.yaml")
+            store = v / "store"
+            store.mkdir()
+            (store / "ok.judge.json").write_text(json.dumps({
+                "reasoning_brief": "clearly a cardiology document about heart rhythm",
+                "primary_subdomain": "cardiology",
+                "confidence_bucket": "SURE",
+                "relation_type": "none",
+                "secondary_subdomains": [],
+            }), encoding="utf-8")
+            (store / "ok.md").write_text("---\ntitle: t\n---\nbody", encoding="utf-8")
+            self.assertEqual(validate.cmd_classify(v, campaign=Path("campaigns/test"), store=Path("store")), 0)
+            first = (store / "ok.md").read_text(encoding="utf-8")
+            self.assertEqual(validate.cmd_classify(v, campaign=Path("campaigns/test"), store=Path("store")), 0)
+            self.assertEqual((store / "ok.md").read_text(encoding="utf-8"), first)
+
+
 class TestLabelStudioView(unittest.TestCase):
     def test_view_renders_for_N(self):
         import sys

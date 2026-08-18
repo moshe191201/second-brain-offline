@@ -19,6 +19,12 @@ beautifulsoup4
 
 # stage 4 — domain terms
 wordfreq==3.1.1
+# Subdomain clustering only. Optional at import (extract_domain_terms.py guards
+# sklearn) but NOT optional in the gap: without them write_subdomain_keywords
+# silently returns num_clusters=0 with the note buried in its output JSON, so
+# stage 4 loses clustering with nothing on stderr to say so.
+scikit-learn
+numpy
 
 # stages 3 and 5 — config + LLM transport
 PyYAML

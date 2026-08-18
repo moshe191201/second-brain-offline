@@ -32,25 +32,36 @@ site/
 # The binary is expected via YAP_DIR/yap.exe or on $PATH.
 deps/yap/
 
+# ---------------------------------------------------------------------------
+# ingest-pipeline artifacts.
+#
+# These paths moved under ingest-pipeline/ when the pipeline became its own
+# product. Any pattern containing an internal slash is anchored to the repo
+# root, so the pre-move spellings (scripts/..., data/...) silently stopped
+# matching -- which would have let `git add -A` in the air gap commit the whole
+# converted corpus and ~76 MB of .NET publish output.
+# ---------------------------------------------------------------------------
+
 # OneNote offline - .NET build outputs (self-contained publish ~76MB, local only)
-scripts/OneNoteOffline/bin/
-scripts/OneNoteOffline/obj/
-scripts/OneNoteOffline/publish/
+ingest-pipeline/scripts/OneNoteOffline/bin/
+ingest-pipeline/scripts/OneNoteOffline/obj/
+ingest-pipeline/scripts/OneNoteOffline/publish/
 
 # Waived derived artifacts (not part of vault 3-layer model)
-# data/domain_terms/glossary.csv IS committed as a template (headers + example row).
-/raw_md/
-data/domain_terms/*
-!data/domain_terms/glossary.csv
-data/hebrew_dict.json
-data/translations/
-data/review_queue/
+# ingest-pipeline/data/domain_terms/glossary.csv IS committed as a template
+# (headers + example row), hence the negation below.
+/ingest-pipeline/raw_md/
+ingest-pipeline/data/domain_terms/*
+!ingest-pipeline/data/domain_terms/glossary.csv
+ingest-pipeline/data/hebrew_dict.json
+ingest-pipeline/data/translations/
+ingest-pipeline/data/review_queue/
 .campaigns/
 campaigns/
-data/hot_words.csv
+ingest-pipeline/data/hot_words.csv
 
 # Large raw allowlist data (generated, not committed)
-/data/person_names/first_names_full.txt
-/data/person_names/first_names_raw.json
-/data/person_names/first_names_raw.csv
-/data/person_names/faker_first.json
+/ingest-pipeline/data/person_names/first_names_full.txt
+/ingest-pipeline/data/person_names/first_names_raw.json
+/ingest-pipeline/data/person_names/first_names_raw.csv
+/ingest-pipeline/data/person_names/faker_first.json
