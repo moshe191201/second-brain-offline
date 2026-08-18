@@ -3,15 +3,19 @@ import tempfile
 from pathlib import Path
 import unittest
 
-from second_brain_vault_framework import core as vault
+import sys as _sys
 
 ROOT = Path(__file__).resolve().parents[1]
-PAYLOAD = vault.payload_root()
+_sys.path.insert(0, str(ROOT / "scripts"))
+from classify import validate  # noqa: E402  (pipeline-local, not the framework)
+
+# Classification templates moved out of the framework payload with the pipeline.
+TEMPLATES = ROOT / "templates" / "classification"
 
 
 class TestClassificationTemplates(unittest.TestCase):
     def test_taxonomy_exists_and_has_subdomains(self):
-        p = PAYLOAD / "templates" / "classification" / "taxonomy.yaml"
+        p = TEMPLATES / "taxonomy.yaml"
         self.assertTrue(p.exists())
         txt = p.read_text(encoding="utf-8")
         # at least 5 subdomains in toy
@@ -24,7 +28,7 @@ class TestClassificationTemplates(unittest.TestCase):
         import sys
         sys.path.insert(0, str(ROOT / "scripts"))
         from classify.judge import load_yaml_simple, build_schema
-        tax_path = PAYLOAD / "templates" / "classification" / "taxonomy.yaml"
+        tax_path = TEMPLATES / "taxonomy.yaml"
         _, subs = load_yaml_simple(tax_path)
         allowed = sorted(subs.keys())
         schema = build_schema(allowed)
@@ -34,7 +38,7 @@ class TestClassificationTemplates(unittest.TestCase):
         self.assertFalse(schema.get("additionalProperties", True))
 
     def test_glossary_keys_unique(self):
-        p = PAYLOAD / "templates" / "classification" / "glossary.yaml"
+        p = TEMPLATES / "glossary.yaml"
         txt = p.read_text(encoding="utf-8")
         # extract keys under terms:
         import re
@@ -45,14 +49,14 @@ class TestClassificationTemplates(unittest.TestCase):
         self.assertGreaterEqual(len(keys), 5)
 
     def test_policy_enums_valid(self):
-        p = PAYLOAD / "templates" / "classification" / "policy.yaml"
+        p = TEMPLATES / "policy.yaml"
         txt = p.read_text(encoding="utf-8")
         self.assertIn("first_window", txt)
         self.assertIn("SURE", txt)
         self.assertIn("primary_plus_secondary", txt)
 
     def test_label_studio_view_exists(self):
-        p = PAYLOAD / "templates" / "classification" / "label_studio" / "view.xml"
+        p = TEMPLATES / "label_studio" / "view.xml"
         self.assertTrue(p.exists())
         txt = p.read_text(encoding="utf-8")
         self.assertIn("<HyperText", txt)
@@ -121,15 +125,14 @@ class TestCoreClassifyValidator(unittest.TestCase):
     def test_closed_vocab_rejects_unknown(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            rc = vault.cmd_scaffold(root, "V")
-            self.assertEqual(rc, 0)
             v = root / "V"
+            v.mkdir()
             # Create a minimal campaign taxonomy (use payload toy as campaign)
             camp = v / "campaigns" / "test"
             camp.mkdir(parents=True)
             # Copy payload taxonomy as campaign taxonomy (so allowed = 5 subs)
             import shutil
-            shutil.copy(PAYLOAD / "templates" / "classification" / "taxonomy.yaml", camp / "taxonomy.yaml")
+            shutil.copy(TEMPLATES / "taxonomy.yaml", camp / "taxonomy.yaml")
             store = v / "store"
             store.mkdir()
             # Create a judge file with unknown primary
@@ -141,18 +144,18 @@ class TestCoreClassifyValidator(unittest.TestCase):
                 "secondary_subdomains": []
             }), encoding="utf-8")
             (store / "abc.md").write_text("---\ntitle: t\n---\nbody", encoding="utf-8")
-            rc = vault.cmd_classify(v, campaign=Path("campaigns/test"), store=Path("store"))
+            rc = validate.cmd_classify(v, campaign=Path("campaigns/test"), store=Path("store"))
             self.assertNotEqual(rc, 0)
 
     def test_rejects_numeric_confidence(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            vault.cmd_scaffold(root, "V")
             v = root / "V"
+            v.mkdir()
             camp = v / "campaigns" / "test"
             camp.mkdir(parents=True)
             import shutil
-            shutil.copy(PAYLOAD / "templates" / "classification" / "taxonomy.yaml", camp / "taxonomy.yaml")
+            shutil.copy(TEMPLATES / "taxonomy.yaml", camp / "taxonomy.yaml")
             store = v / "store"
             store.mkdir()
             (store / "xyz.judge.json").write_text(json.dumps({
@@ -163,7 +166,7 @@ class TestCoreClassifyValidator(unittest.TestCase):
                 "relation_type": "none",
             }), encoding="utf-8")
             (store / "xyz.md").write_text("---\ntitle: t\n---\nbody", encoding="utf-8")
-            rc = vault.cmd_classify(v, campaign=Path("campaigns/test"), store=Path("store"))
+            rc = validate.cmd_classify(v, campaign=Path("campaigns/test"), store=Path("store"))
             self.assertNotEqual(rc, 0)
 
 
@@ -173,7 +176,7 @@ class TestLabelStudioView(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "scripts"))
         from classify.export_label_studio import md_to_html
         # Test N=5 and N=20 by checking template Choice count
-        tpl = (PAYLOAD / "templates" / "classification" / "label_studio" / "view.xml").read_text(encoding="utf-8")
+        tpl = (TEMPLATES / "label_studio" / "view.xml").read_text(encoding="utf-8")
         self.assertGreaterEqual(tpl.count("<Choice"), 10)  # 5+5
         # Test export rendering path with temp taxonomy
         with tempfile.TemporaryDirectory() as d:

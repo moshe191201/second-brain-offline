@@ -34,10 +34,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="per-clipping ingest state")
 
-    cl = sub.add_parser("classify", help="validate closed-vocabulary classification and patch frontmatter/ledger")
-    cl.add_argument("--campaign", default="campaigns/example")
-    cl.add_argument("--store", default="store")
-    cl.add_argument("--dry-run", action="store_true")
     return p
 
 
@@ -58,8 +54,6 @@ def main(argv: list[str] | None = None) -> int:
         return core.cmd_register(root, dry_run=args.dry_run)
     if args.command == "status":
         return core.cmd_status(root)
-    if args.command == "classify":
-        return core.cmd_classify(root, campaign=Path(args.campaign), store=Path(args.store), dry_run=args.dry_run)
     return 2
 
 
