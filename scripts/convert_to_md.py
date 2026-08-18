@@ -135,6 +135,8 @@ def build_frontmatter(title: str, created: datetime | None,
                       hebrew_fixed: bool,
                       original_paths: list[str] | None = None,
                       attachment_of: str | None = None) -> str:
+    if yaml is None:
+        raise RuntimeError("PyYAML not available — cannot build frontmatter")
     meta = {"title": title}
     if created is not None:
         if created.tzinfo is None:
