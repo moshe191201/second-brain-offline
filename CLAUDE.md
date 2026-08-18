@@ -1,15 +1,30 @@
-# CLAUDE.md — Framework Repo
+# CLAUDE.md — Monorepo
 
-This repo is the **framework**, not a vault. A vault is a user-owned folder the framework
-writes into. `example_vault/` is the one vault that lives here, as living documentation.
+This repo holds **two independent products**. Neither is a vault; a vault is a user-owned
+folder the framework writes into, and `example_vault/` is the one vault that lives here, as
+living documentation.
+
+| | **second_brain_vault_framework** | **ingest-pipeline** |
+|---|---|---|
+| what | `vault` CLI + the payload laid into vaults | 4-stage Hebrew document pipeline |
+| deps | **pure stdlib, always** | ~11 packages, `ingest-pipeline/requirements.txt` |
+| platform | cross-platform | **Windows only** (D1) |
+| tests | `tests/` | `ingest-pipeline/tests/` |
+| CI lane | `unit` | `pipeline-unit` |
+
+**They do not import each other.** The pipeline never imports
+`second_brain_vault_framework`, and the framework has no knowledge that the pipeline
+exists — nothing in `manifest.json` refers to it and no vault owner ever sees it. That
+separation is deliberate and load-bearing; integration will be designed later.
 
 > Design specs: `docs/superpowers/specs/` · Plans: `docs/superpowers/plans/`
 > Vault schema (for work *inside* a vault): `example_vault/CLAUDE.md`
+> Pipeline state and open work: `HANDOFF.md`
 
 ## Layout
 
 ```
-docs/                              mkdocs site — user guide + specs/plans
+docs/                              mkdocs site — user guide + specs/plans (both products)
 example_vault/                     a real vault, built by the current payload (CI-verified)
 qmd-api/                           staging + install scripts for the qmd OpenAI-backend fork
 src/second_brain_vault_framework/  the pip package
@@ -18,6 +33,13 @@ src/second_brain_vault_framework/  the pip package
   ├── manifest.json                what the framework owns in a vault + user-zone markers
   └── payload/                     the files laid down into a vault
 tests/                             stdlib unittest suite for the package
+ingest-pipeline/                   the other product — no framework imports
+  ├── scripts/                     stages 3-6
+  ├── tests/                       its own suite, its own deps
+  ├── templates/                   planning/ questionnaire + classification/ taxonomy
+  ├── skills/                      vault-classify (not shipped in the payload)
+  ├── data/                        glossary, person names, translation policy
+  └── requirements.txt             the pipeline's dependency surface
 ```
 
 ## The one rule that explains the layout
@@ -44,8 +66,10 @@ skip dot-directories; `core.payload_path_for()` is the only place that translati
 
 ## Conventions
 
-- **Pure stdlib.** The CLI must run inside an air gap with nothing installed. No runtime deps
-  in `pyproject.toml`, ever. Docs/build extras are fine.
+- **Pure stdlib — the framework only.** The `vault` CLI must run inside an air gap with
+  nothing installed. No runtime deps in `pyproject.toml`, ever. Docs/build extras are fine.
+  **This rule does not apply to `ingest-pipeline/`**, which legitimately needs ~11 packages;
+  they are declared in `ingest-pipeline/requirements.txt` and never in `pyproject.toml`.
 - **Fail closed.** `vault check` exits non-zero on any finding. Never soften it to a warning.
 - **`tests/VAULT_TESTS.md` in a vault is never a qmd collection** — gold answers must not
   contaminate retrieval. `core.cmd_register` deliberately omits it.
@@ -54,7 +78,23 @@ skip dot-directories; `core.payload_path_for()` is the only place that translati
 
 ## Before calling work done
 
+Framework:
+
 ```bash
 python -m unittest discover -s tests
+```
+
+```bash
 vault check example_vault
 ```
+
+Pipeline (needs `ingest-pipeline/requirements.txt` installed; YAP-dependent tests skip
+cleanly without `YAP_DIR`):
+
+```bash
+cd ingest-pipeline && python -m unittest discover -s tests
+```
+
+A change touching both products has to pass both. The framework suite must keep passing
+with **nothing** installed — if it starts needing a package, something leaked across the
+boundary.

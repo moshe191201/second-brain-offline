@@ -20,33 +20,17 @@ BUCKETS = ["SURE", "NEEDS_HUMAN_VALIDATION", "I_GUESSED"]
 RELATIONS = ["none", "comparison", "relationship", "progression"]
 
 
-try:
-    from second_brain_vault_framework.core import _TAXONOMY_RE as _CORE_TAX_RE, _parse_taxonomy_blocks as _core_parse_blocks
-    _TAXONOMY_RE = _CORE_TAX_RE
-    _HAS_CORE = True
-except Exception:
-    _TAXONOMY_RE = re.compile(r"^\s{2}([\w-]+):\s*(?:\n|$)", re.MULTILINE)
-    _HAS_CORE = False
-
-
-def _local_parse_blocks(txt: str) -> dict[str, str]:
-    matches = list(_TAXONOMY_RE.finditer(txt))
-    blocks: dict[str, str] = {}
-    for i, m in enumerate(matches):
-        name = m.group(1)
-        if name in ("subdomains", "version", "campaign"):
-            continue
-        start = m.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(txt)
-        blocks[name] = txt[start:end]
-    return blocks
+try:  # package import (from classify.x import ...)
+    from .taxonomy import TAXONOMY_RE as _TAXONOMY_RE, parse_taxonomy_blocks as _parse_blocks, templates_root
+except ImportError:  # direct script run (python scripts/classify/x.py)
+    from taxonomy import TAXONOMY_RE as _TAXONOMY_RE, parse_taxonomy_blocks as _parse_blocks, templates_root
 
 
 def load_yaml_simple(path: Path):
     if not path.exists():
         return "", {}
     txt = path.read_text(encoding="utf-8")
-    blocks = (_core_parse_blocks(txt) if _HAS_CORE else _local_parse_blocks(txt))
+    blocks = _parse_blocks(txt)
     subs: dict = {}
     for name, block in blocks.items():
         def_m = re.search(r"definition:\s*\"(.*?)\"", block, flags=re.DOTALL)
@@ -137,10 +121,10 @@ def main():
     camp = Path(args.campaign)
     tax_path = Path(args.taxonomy) if args.taxonomy else camp / "taxonomy.yaml"
     if not tax_path.exists():
-        tax_path = Path("src/second_brain_vault_framework/payload/templates/classification/taxonomy.yaml")
+        tax_path = (templates_root() / "taxonomy.yaml")
     gloss_path = camp / "glossary.yaml"
     if not gloss_path.exists():
-        gloss_path = Path("src/second_brain_vault_framework/payload/templates/classification/glossary.yaml")
+        gloss_path = (templates_root() / "glossary.yaml")
 
     _, subs = load_yaml_simple(tax_path)
     gloss_text = gloss_path.read_text(encoding="utf-8") if gloss_path.exists() else ""
@@ -161,7 +145,7 @@ def main():
         few_shot = 3
         _pol_path = Path(args.campaign) / "policy.yaml" if not Path(args.campaign).is_absolute() else Path(args.campaign) / "policy.yaml"
         if not _pol_path.exists():
-            _pol_path = Path("src/second_brain_vault_framework/payload/templates/classification/policy.yaml")
+            _pol_path = (templates_root() / "policy.yaml")
         try:
             if _pol_path.exists():
                 _m = re.search(r"few_shot_per_topk:\s*(\d+)", _pol_path.read_text(encoding="utf-8"))
@@ -185,7 +169,7 @@ def main():
     few_shot_per_topk = 3
     _policy_path_for_fewshot = Path(args.campaign) / "policy.yaml"
     if not _policy_path_for_fewshot.exists():
-        _policy_path_for_fewshot = Path("src/second_brain_vault_framework/payload/templates/classification/policy.yaml")
+        _policy_path_for_fewshot = (templates_root() / "policy.yaml")
     try:
         if _policy_path_for_fewshot.exists():
             _mf = re.search(r"few_shot_per_topk:\s*(\d+)", _policy_path_for_fewshot.read_text(encoding="utf-8"))

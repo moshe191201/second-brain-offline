@@ -54,7 +54,7 @@ Generic subdomain classification (Stage 6) for any campaign. Deterministic scrip
 
 7. **Ledger + frontmatter (stdlib):**
    ```bash
-   python scripts/vault.py classify --campaign campaigns/<campaign> --store store/
+   python scripts/classify/validate.py <vault_root> --campaign campaigns/<campaign> --store store/
    # closed-vocabulary validator: rejects primary ∉ taxonomy, patches frontmatter ledger atomically
    vault check
    ```

@@ -51,12 +51,23 @@ def call_embeddings(texts, base_url, api_key, model):
         return [row["embedding"] for row in data["data"]]
 
 
+def _templates_root_lazy(filename: str):
+    try:
+        from .taxonomy import templates_root
+    except ImportError:
+        from taxonomy import templates_root
+    return templates_root() / filename
+
+
 def load_taxonomy(path: Path):
     txt = path.read_text(encoding="utf-8")
     subs = {}
     try:
-        from second_brain_vault_framework.core import _parse_taxonomy_blocks
-        blocks = _parse_taxonomy_blocks(txt)
+        try:
+            from .taxonomy import parse_taxonomy_blocks
+        except ImportError:
+            from taxonomy import parse_taxonomy_blocks
+        blocks = parse_taxonomy_blocks(txt)
     except Exception:
         _local_re = re.compile(r"^\s{2}([\w-]+):\s*(?:\n|$)", re.MULTILINE)
         matches = list(_local_re.finditer(txt))
@@ -91,7 +102,7 @@ def main():
     tax_path = Path(args.campaign) / "taxonomy.yaml"
     if not tax_path.exists():
         # fallback to payload template
-        tax_path = Path("src/second_brain_vault_framework/payload/templates/classification/taxonomy.yaml")
+        tax_path = _templates_root_lazy("taxonomy.yaml")
     top_k = args.top_k or 4
     # policy override
     if policy_path.exists():

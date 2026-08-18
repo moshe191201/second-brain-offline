@@ -31,6 +31,12 @@ def md_to_html(md: str) -> str:
     return f"<p>{esc}</p>"
 
 
+
+try:  # package import (from classify.x import ...)
+    from .taxonomy import templates_root as _templates_root
+except ImportError:  # direct script run (python scripts/classify/x.py)
+    from taxonomy import templates_root as _templates_root
+
 def main():
     p = argparse.ArgumentParser(description="Export Label Studio tasks")
     p.add_argument("--campaign", default="campaigns/example")
@@ -42,7 +48,7 @@ def main():
     camp = Path(args.campaign)
     tax_path = camp / "taxonomy.yaml"
     if not tax_path.exists():
-        tax_path = Path("src/second_brain_vault_framework/payload/templates/classification/taxonomy.yaml")
+        tax_path = _templates_root() / "taxonomy.yaml"
     # Parse subdomain list for view rendering
     subs = []
     if tax_path.exists():
@@ -100,7 +106,7 @@ def main():
 
     # Render view.xml with N choices if requested
     if args.view_out and subs:
-        tpl_path = Path("src/second_brain_vault_framework/payload/templates/classification/label_studio/view.xml")
+        tpl_path = _templates_root() / "label_studio" / "view.xml"
         if tpl_path.exists():
             tpl = tpl_path.read_text(encoding="utf-8")
             # Render N choices for variable-N (I1): replace placeholder Choice blocks

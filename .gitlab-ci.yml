@@ -1,5 +1,10 @@
-# Framework CI. Every stage is offline-safe except `pages`, which only needs the
-# docs extras — mirroring the air gap the framework itself has to survive in.
+# Monorepo CI: two products, two lanes.
+#
+#   framework  — second_brain_vault_framework, pure stdlib, cross-platform
+#   pipeline   — ingest-pipeline/, ~11 dependencies, Windows in production
+#
+# Every stage is offline-safe except `pages` and `pipeline-unit` (which installs
+# the pipeline's deps) — mirroring the air gap the framework has to survive in.
 
 stages: [test, example, build, pages]
 
@@ -12,10 +17,23 @@ default:
 variables:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
+# Framework lane. `tests/` holds framework tests only, so this needs nothing
+# installed beyond the package itself — which is the point of the split.
 unit:
   stage: test
   script:
     - python -m unittest discover -s tests -v
+
+# Pipeline lane. Separate deps, separate directory, and allowed to be heavy.
+# Runs on Linux here; production is Windows (D1), and the YAP-dependent tests
+# skip cleanly when YAP_DIR is unset.
+pipeline-unit:
+  stage: test
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install -r ingest-pipeline/requirements.txt
+  script:
+    - cd ingest-pipeline && python -m unittest discover -s tests -v
 
 # example_vault/ is living documentation: it must always be a valid vault built
 # by the *current* payload. If a payload change isn't laid down into it, the
