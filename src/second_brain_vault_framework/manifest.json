@@ -1,5 +1,5 @@
 {
-  "framework_version": "0.2.0",
+  "framework_version": "0.2.1",
   "owned_paths": [
     "CLAUDE.md",
     "instructions.md",
@@ -8,13 +8,7 @@
     ".claude/skills/vault-query/SKILL.md",
     ".claude/skills/vault-lint/SKILL.md",
     "scripts/vault.py",
-    "scripts/check_vault_answer.py",
-    "templates/classification/doc_types.yaml",
-    "templates/classification/policy.yaml",
-    "templates/classification/questionnaire.md",
-    "templates/classification/label_studio/view.xml",
-    "templates/classification/label_studio/view_doctype.xml",
-    "templates/classification/label_studio/view_singleton_audit.xml"
+    "scripts/check_vault_answer.py"
   ],
   "scaffold_only_paths": [
     "tests/VAULT_TESTS.md"
