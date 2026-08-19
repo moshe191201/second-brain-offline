@@ -198,6 +198,24 @@ class TestExampleVaultIsCurrent(unittest.TestCase):
 
     _VOLATILE = ("installed_at",)
 
+    def test_a_vault_containing_binary_files_still_compares(self):
+        # A real vault is not all UTF-8 text: .qmd/index.sqlite is present in every
+        # working vault, and macOS adds .DS_Store. Reading every file as text made
+        # this suite pass only on a pristine CI checkout and fail for anyone with
+        # an actual vault.
+        import shutil
+        import tempfile
+        from second_brain_vault_framework import core
+
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / "example_vault"
+            shutil.copytree(ROOT / "example_vault", copy)
+            (copy / ".qmd").mkdir(exist_ok=True)
+            (copy / ".qmd" / "index.sqlite").write_bytes(b"SQLite format 3\x00\xb8\xff")
+            (copy / ".DS_Store").write_bytes(b"\x00\x00\x00\x01Bud1\xb8")
+            core.cmd_upgrade(copy)
+            self._drift_between(copy, ROOT / "example_vault")   # must not raise
+
     def test_upgrading_example_vault_would_change_nothing(self):
         import shutil
         import tempfile
@@ -212,41 +230,56 @@ class TestExampleVaultIsCurrent(unittest.TestCase):
             rc = core.cmd_upgrade(copy)
             self.assertEqual(rc, 0, "vault upgrade failed on example_vault")
 
-            drifted = []
-            for after in sorted(copy.rglob("*")):
-                if not after.is_file():
-                    continue
-                rel = after.relative_to(copy)
-                before = example / rel
-                if not before.exists():
-                    drifted.append(f"{rel} (upgrade would ADD it)")
-                    continue
-                # read_text, NOT read_bytes: cmd_upgrade writes via Path.write_text
-                # with no newline= argument, so Python text mode emits CRLF on
-                # Windows while git may have checked the file out as LF. A byte
-                # comparison would report all 8 owned paths as drifted on a clean
-                # tree, and the suggested remedy (upgrade + commit) would not help.
-                a = after.read_text(encoding="utf-8")
-                b = before.read_text(encoding="utf-8")
-                if a == b:
-                    continue
-                if rel.name == ".vault-framework.json":
-                    ja, jb = json.loads(a), json.loads(b)
-                    for k in self._VOLATILE:
-                        ja.pop(k, None)
-                        jb.pop(k, None)
-                    if ja != jb:
-                        drifted.append(f"{rel} (stamp/manifest drift)")
-                    continue
-                drifted.append(f"{rel} (upgrade would CHANGE it)")
-
-            for before in sorted(example.rglob("*")):
-                if before.is_file() and not (copy / before.relative_to(example)).exists():
-                    drifted.append(f"{before.relative_to(example)} (upgrade would REMOVE it)")
-
             self.assertEqual(
-                drifted, [],
+                self._drift_between(copy, example), [],
                 "example_vault is stale — run `vault upgrade example_vault` and commit")
+
+    @staticmethod
+    def _same_content(a: Path, b: Path) -> bool:
+        """Compare as text where possible, bytes otherwise.
+
+        Text, NOT bytes, for the normal case: cmd_upgrade writes via
+        Path.write_text with no newline= argument, so text mode emits CRLF on
+        Windows while git may have checked the file out as LF, and a byte
+        comparison reports every owned path as drifted on a clean tree.
+
+        Bytes for everything undecodable: a real vault is not all UTF-8. Every
+        working vault carries .qmd/index.sqlite, and macOS adds .DS_Store. Reading
+        those as text made this pass only on a pristine CI checkout and fail for
+        anyone with an actual vault.
+        """
+        try:
+            return a.read_text(encoding="utf-8") == b.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return a.read_bytes() == b.read_bytes()
+
+    def _drift_between(self, copy: Path, example: Path) -> list[str]:
+        drifted = []
+        for after in sorted(copy.rglob("*")):
+            if not after.is_file():
+                continue
+            rel = after.relative_to(copy)
+            before = example / rel
+            if not before.exists():
+                drifted.append(f"{rel} (upgrade would ADD it)")
+                continue
+            if self._same_content(after, before):
+                continue
+            if rel.name == ".vault-framework.json":
+                ja = json.loads(after.read_text(encoding="utf-8"))
+                jb = json.loads(before.read_text(encoding="utf-8"))
+                for k in self._VOLATILE:
+                    ja.pop(k, None)
+                    jb.pop(k, None)
+                if ja != jb:
+                    drifted.append(f"{rel} (stamp/manifest drift)")
+                continue
+            drifted.append(f"{rel} (upgrade would CHANGE it)")
+
+        for before in sorted(example.rglob("*")):
+            if before.is_file() and not (copy / before.relative_to(example)).exists():
+                drifted.append(f"{before.relative_to(example)} (upgrade would REMOVE it)")
+        return drifted
 
 if __name__ == "__main__":
     unittest.main()
