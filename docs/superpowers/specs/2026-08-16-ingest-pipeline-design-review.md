@@ -1,7 +1,28 @@
 # Ingest Pipeline — Design Review & Decision Memo
 
 **Date:** 2026-08-16 · **Scope:** PRs #3, #4, #9, #11, #12 · **Audience:** Moshe + Yoni
-**Status:** D1 and D3 resolved 2026-08-16 (§4). D2, D4, D5 still open — settle before the month apart.
+**Status:** superseded in part — see the update below. Kept as the decision record.
+
+> ## Update — 2026-08-19
+>
+> **All five decisions are resolved.** D1 and D3 on 2026-08-16; D2, D4 and D5 since.
+>
+> | | Resolution |
+> |---|---|
+> | **D2** glossary enforce vs verify | **Option A, shipped** (PR #9). YAP-root masking with exact occurrence counts, order verification, and hard failure on sentinel loss. §2 below describes the problem it solved. |
+> | **D4** the 282 MB | **Neither LFS nor vendoring — deleted outright.** YAP now arrives through the air-gap bundle via `YAP_DIR`. The LFS residue that outlived it was removed in PR #16. |
+> | **D5** freeze stage 6 | **Merged, then frozen** (PR #12). No further investment until stages 3 and 5 run on the real corpus. |
+>
+> Also landed since: chunk-level checkpointing and per-chunk retry (#15), the monorepo split
+> into `second_brain_vault_framework` + `ingest-pipeline/` (#16), and GitHub Actions CI with
+> boundary guards (#17). That resolves I1, I2, I4, I6, I8, I10, M1, M7 and the `example_vault`
+> staleness gap. §8's table carries the per-item status.
+>
+> **Still open, and now the top of the list: M4 — the air-gap bundle** (§5). It is the only
+> item whose failure is discovered on the far side of the gap. §6 (end-to-end testing) and
+> M3 (irreversible Hebrew fix) remain accurate and open.
+>
+> Current state and open work live in `HANDOFF.md`, which supersedes §7's priority grid.
 
 ---
 
@@ -31,6 +52,12 @@ situation called for splitting it — see §2.
 ---
 
 ## 2. The central problem: verification ≠ guarantee
+
+> **Resolved (D2, PR #9).** The code below is the *old* behaviour, kept because it explains why
+> the fix was necessary. `scripts/translation_masking.py` now masks each glossary term to a
+> `⟦EN:<id>:<english>⟧` sentinel before translation and restores it after, so the English is
+> substituted rather than hoped for. The at-least-once, document-wide check described here —
+> under which a term translated correctly once and paraphrased nine times passed — is gone.
 
 Domain terms are handled by injecting the glossary into the prompt:
 
@@ -72,26 +99,26 @@ scripts/translate.py:1189
 
 | # | Problem | Example |
 |---|---|---|
-| M1 | Glossary is verified, not enforced | see §2 |
+| ~~M1~~ | ~~Glossary is verified, not enforced~~ | ✅ **resolved (D2, PR #9)** — deterministic masking, exact counts |
 | M2 | Glossary gate is all-or-nothing | one `proposed` row blocks *every* document; the tempting unblock is to mass-mark `approved`, which destroys the gate |
 | M3 | Hebrew OCR fix is irreversible | raw docling output is not kept beside the fixed file; 3,800 pages are converted **once**, in the gap |
-| M4 | Air-gap dependency bundle unproven | see §5 for the full inventory. A missing wheel inside the gap is a full stop |
+| **M4** | Air-gap dependency bundle unproven | **STILL OPEN — now the single highest priority.** See §5 and its correction. A missing wheel inside the gap is a full stop |
 | M5 | Windows-only is a docstring, not a contract | decision accepted (D1) — but nothing enforces or documents it outside one docstring in `hebrew_yap_stemmer.py` |
-| M6 | Stages never run end to end | four stages built in parallel; nothing has run #3 → #4 → #9 in sequence |
-| M7 | No glossary collision detection | two Hebrew terms → one English rendering (or one term with two rows) corrupts output silently |
+| **M6** | Stages never run end to end | **STILL OPEN.** Every stage has unit tests (42 framework + 194 pipeline, green on ubuntu/macos/windows); nothing tests that the stages *compose*. See §6 |
+| ~~M7~~ | ~~No glossary collision detection~~ | ✅ **resolved** — `check_glossary_collisions` runs at mask time *and* at the gate (`check_glossary.py:89`), so a collision fails before any document is translated |
 
 ### 3B — Infra / long-term (reusability, template value)
 
 | # | Problem | Example |
 |---|---|---|
-| I1 | Pipeline lives in root `scripts/` with no project identity | resolved in principle by D3 — needs the move to a real top-level project |
-| I2 | 282 MB of binaries in public git history | `deps/yap/` — history problem, so cost rises with every merge on top |
+| ~~I1~~ | ~~Pipeline lives in root `scripts/` with no project identity~~ | ✅ **resolved (PR #16)** — `ingest-pipeline/` with its own scripts/tests/templates/data/requirements |
+| ~~I2~~ | ~~282 MB of binaries in public git history~~ | ✅ **resolved (D4)** — deleted; zero objects matching `deps/yap` in any ref |
 | I3 | No contract between stages | #4 writes `translation_seed.csv`, #9 reads it by path convention; nothing versions or validates the handoff |
-| I4 | No CI on GitHub | CI is `.gitlab-ci.yml`; all 5 PRs show zero checks |
+| ~~I4~~ | ~~No CI on GitHub~~ | ✅ **resolved (PR #17)** — two lanes; found on its first run that `vault upgrade` had never worked on Windows |
 | I5 | Glossary schema under-designed | the dataset is the actual asset; schema is 6 columns + an example row — no versioning, provenance, or approval trail |
-| I6 | `convert_config.json` is a shared god-config at repo root | #3 owns `docling`/`pdf`/`hebrew`, #9 adds `translation`; already a merge collision. Mostly resolved by D3's move |
-| I7 | Module boundaries | `translate.py` is 1,480 lines; `call_llm` exists in 3 copies — a protocol fix has 3 places to miss |
-| I8 | Model drift unrecorded | #12 logs `model_id`; #9 does not — updating the local vLLM makes translations indistinguishable |
+| ~~I6~~ | ~~`convert_config.json` is a shared god-config at repo root~~ | ✅ **resolved (PR #16)** — moved to `ingest-pipeline/`, out of the framework's way |
+| I7 | Module boundaries | **partially open.** `translate.py` is 1,175 lines and the `translation_*.py` split landed, but `call_llm` **still exists in 3 copies** (`translation_llm.py`, `translation_reviewer.py`, `classify/judge.py`) — a protocol fix still has 3 places to miss |
+| ~~I8~~ | ~~Model drift unrecorded~~ | ✅ **resolved** — `translate.py` records `model_id` and a `glossary_version` in every terminal ledger event |
 | I9 | Unmeasured complexity | 20% kimi-k2.7 reviewer sampling: second model through the gap, no evidence it catches what deterministic QA misses |
 
 ---
@@ -130,7 +157,7 @@ repo** — a monorepo with two products. Not payload, not a separate repo.
 
 Structure it now so packaging is a later `pyproject.toml` addition, not another file move.
 
-### ⬜ D2 · Glossary: enforce or verify? — **OPEN, the important one**
+### ✅ D2 · Glossary: enforce or verify? — **RESOLVED: Option A, shipped in PR #9**
 
 | Option | Cost | Result |
 |---|---|---|
@@ -141,23 +168,53 @@ Structure it now so packaging is a later `pyproject.toml` addition, not another 
 **Recommendation: A.** Everything else stays probabilistic exactly as agreed — this makes
 deterministic only the axis we said must be.
 
-### ⬜ D4 · The 282 MB — **OPEN, cheap now, expensive after more merges**
+> **Outcome:** A, as recommended. `mask_glossary_terms` fails closed if YAP is unavailable, which
+> means stage 5 now depends on the YAP stack — see the correction in §5.
+
+### ✅ D4 · The 282 MB — **RESOLVED: deleted entirely, not LFS'd or vendored**
 
 Options: Git LFS · gitignore + vendoring script (the pattern `deps/docling-models/` already uses)
 · leave it. **Recommendation: gitignore + vendoring script, before #4 merges.** Unaffected by D1 —
 the binaries are the *right* binaries now, but they are still 282 MB of permanent public history.
 Also confirm the BGU lexicon and YAP model redistribution terms — the repo is public.
 
-### ⬜ D5 · Freeze stage 6 (classification, #12)? — **OPEN**
+> **Outcome: none of the three.** `deps/yap/` was removed outright and exists in no branch. YAP is
+> located at runtime through `YAP_DIR` and crosses the gap in the bundle instead. The redistribution
+> question is moot for the repo, but **still applies to whoever assembles the bundle**.
+>
+> A `.gitattributes` LFS rule for `deps/yap/**` outlived the binaries by two months, along with
+> four `git-lfs` hooks that `exit 2` when git-lfs is absent — silently aborting checkouts and
+> merges. Removed in PR #16; the hooks are not version-controlled and must be deleted per clone.
+
+### ✅ D5 · Freeze stage 6 (classification, #12)? — **RESOLVED: merged, then frozen**
 
 #12 is the most polished PR and the least connected to the MVP. **Recommendation: merge it, then
 freeze.** No further investment until PDF conversion and translation work on the real corpus.
+
+> **Outcome:** merged and frozen, as recommended. One change since, forced by the monorepo split:
+> `core.cmd_classify` was framework code reading stage-6 output, so it moved to
+> `ingest-pipeline/scripts/classify/validate.py` and `vault classify` left the CLI (PR #16).
+> Behaviour is unchanged; the framework simply no longer knows the pipeline exists.
 
 ---
 
 ## 5. What has to cross the gap (M4)
 
-Yoni owns building and proving this bundle. The good news from the audit: **stages 3 and 4 carry
+Yoni owns building and proving this bundle.
+
+> **Correction (2026-08-19).** The paragraph below is **wrong now**, and the way it is wrong is
+> the dangerous direction. Implementing D2 made `mask_glossary_terms` call `_require_yap()` and
+> **fail closed**, so *stage 5 cannot run at all without the YAP stack* — it is no longer pure
+> stdlib and no longer needs "only a reachable LLM endpoint". The dependency surface is not
+> confined to stages 3 and 4.
+>
+> The pip surface is now declared in `ingest-pipeline/requirements.txt` rather than in prose;
+> build the bundle from that file, **on Windows**, and note the non-pip pieces listed at the
+> bottom of it. Stage 4's `scikit-learn` + `numpy` are guarded at import but not optional in the
+> gap: without them subdomain clustering silently returns `num_clusters=0` with the explanation
+> buried in output JSON.
+
+The good news from the audit: **stages 3 and 4 carry
 the entire dependency surface — PR #9 (translate) and PR #12 (classify) are pure stdlib**, needing
 only a reachable LLM endpoint. The heavy lifting is concentrated in conversion and term extraction.
 
@@ -254,6 +311,10 @@ No framework, no fixture library. It catches compose-time bugs, which is 90% of 
 
 ## 7. Priority
 
+> **Superseded — see `HANDOFF.md` §8.** The grid below is the 2026-08-16 picture and is kept as
+> the record. Everything in the "This week" column is now resolved. The current answer to
+> "if you do only one thing" is **M4, the air-gap bundle**.
+
 **Importance ↑ · Urgency →** (urgency = cost of deferring, not how loud it is)
 
 |  | This week | This month | Later |
@@ -278,27 +339,32 @@ changes #4 three weeks from now with nobody watching.
 |---|---|---|---|---|---|
 | ~~D1~~ | ~~Windows or Linux~~ | Decision | — | — | ✅ **resolved: Windows-only** |
 | ~~D3~~ | ~~Is the pipeline framework-owned~~ | Decision | — | — | ✅ **resolved: monorepo, 2nd framework** |
-| **D2** | Glossary: enforce vs verify | Decision | Both | 30 min | **P0** |
-| **D4** | 282 MB out of git history | Decision | Moshe | 30 min + 2h | P1 |
-| **D5** | Merge #12 then freeze scope | Decision | Both | 10 min | P2 |
-| M1 | Deterministic glossary substitution | MVP | Yoni | ~50 LOC | **P0** |
+| ~~D2~~ | ~~Glossary: enforce vs verify~~ | Decision | — | — | ✅ **resolved: enforce (PR #9)** |
+| ~~D4~~ | ~~282 MB out of git history~~ | Decision | — | — | ✅ **resolved: deleted outright** |
+| ~~D5~~ | ~~Merge #12 then freeze scope~~ | Decision | — | — | ✅ **resolved: merged + frozen** |
+| ~~M1~~ | ~~Deterministic glossary substitution~~ | MVP | — | — | ✅ **done (PR #9)** |
 | M2 | Per-document glossary gate | MVP | Yoni | ~5 LOC | P1 |
 | M3 | Keep raw docling output beside fixed | MVP | Yoni | 0.5 d | **P0** |
-| M4 | Offline bundle, built + proven on Windows | MVP | Yoni | 1 d | **P0** |
+| **M4** | Offline bundle, built + proven on Windows | MVP | Yoni | 1 d | **P0 — now the top item** |
 | M5 | Windows constraint: README + startup check | MVP | Yoni | 1 h | P1 |
 | M6 | One manual end-to-end run | MVP | Yoni | 2 h | **P0** |
-| M7 | Glossary collision detection | MVP | Yoni | ~20 LOC | P1 |
+| ~~M7~~ | ~~Glossary collision detection~~ | MVP | — | — | ✅ **done** — at mask time and at the gate |
 | T1 | Golden 10-doc corpus + expected output | MVP | Yoni | 0.5 d | P1 |
 | T2 | `smoke` — mock chain in CI | Infra | Moshe | 0.5 d | P2 |
-| I1 | ~~Move into payload~~ → move to `ingest/` | Infra | Moshe | 1 d | P2 |
-| I2 | 282 MB history surgery | Infra | Moshe | 2 h | P1 |
+| ~~I1~~ | ~~Move to `ingest/`~~ | Infra | — | — | ✅ **done (PR #16)** — `ingest-pipeline/` |
+| ~~I2~~ | ~~282 MB history surgery~~ | Infra | — | — | ✅ **done (D4)** |
 | I3 | One-page stage handoff contract | Infra | Yoni | 1 h | P1 |
-| I4 | GitHub Actions CI (2 lanes, Windows for pipeline) | Infra | Moshe | 2 h | P2 |
+| ~~I4~~ | ~~GitHub Actions CI (2 lanes, Windows for pipeline)~~ | Infra | — | — | ✅ **done (PR #17)** |
 | I5 | Glossary schema: version + provenance | Infra | Both | 0.5 d | P2 |
-| I6 | Config into `ingest/` | Infra | Moshe | 1 h | P3 |
-| I7 | Extract verification + shared `call_llm` | Infra | Yoni | 0.5 d | P3 |
-| I8 | Record `model_id` in translation ledger | Infra | Yoni | ~10 LOC | P2 |
+| ~~I6~~ | ~~Config into `ingest/`~~ | Infra | — | — | ✅ **done (PR #16)** |
+| I7 | Extract verification + shared `call_llm` | Infra | Yoni | 0.5 d | P3 — **partial**: modules split, 3 `call_llm` copies remain |
+| ~~I8~~ | ~~Record `model_id` in translation ledger~~ | Infra | — | — | ✅ **done** |
 | I9 | Measure or drop the 20% kimi reviewer | Infra | Yoni | 0.5 d | P3 |
-| I10 | `CLAUDE.md`: monorepo + scope pure-stdlib rule | Infra | Moshe | 1 h | P2 |
+| ~~I10~~ | ~~`CLAUDE.md`: monorepo + scope pure-stdlib rule~~ | Infra | — | — | ✅ **done (PR #16)**, and `tests/test_boundary.py` now enforces it |
 
 **P0 = settle or start before the month apart.**
+
+> **As of 2026-08-19:** every Decision is resolved and the only remaining **P0 is M4**, the
+> air-gap bundle. Two items were added by work done since and are tracked in `HANDOFF.md`
+> rather than here — chunk-level checkpointing (§4.1, fixes 1–2 shipped in PR #15; 3–5 still
+> gated on measuring the corpus page-size distribution) and pruning the chunk checkpoint store.

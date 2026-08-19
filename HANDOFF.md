@@ -53,6 +53,8 @@ assembling in the gap. Everything else can be probabilistic with verification.
 | #12 classification | merged |
 | #13 domain terms | merged |
 | #15 chunk checkpointing (§4.1 fixes 1–2) | merged |
+| #16 monorepo split + LFS removal (§4.3, §4.4, §4.6) | merged |
+| #17 GitHub Actions CI + boundary guards (§4.5) | merged |
 
 Verification on `main` right now:
 
@@ -249,9 +251,10 @@ to declare no runtime dependencies.
   convention; nothing versions or validates the handoff. *One page* documenting what each stage
   emits and consumes is how Yoni avoids breaking stage 5 when he changes stage 4 with nobody
   watching.
-- **4.9 Collision detection at the gate.** `check_glossary_collisions` raises at mask time, per
-  chunk, mid-run — so a collision surfaces after N documents are already translated. Also run it in
-  `scripts/check_glossary.py` so it fails before any work starts.
+- ~~**4.9 Collision detection at the gate.**~~ **Already done** — verified 2026-08-19.
+  `check_glossary_collisions` runs at mask time *and* at the gate
+  (`ingest-pipeline/scripts/check_glossary.py:89`), so a collision fails before any document is
+  translated, not after N of them.
 - **4.10 Measure or drop the 20% kimi reviewer.** Second model through the gap, no evidence it
   catches anything the deterministic QA misses.
 - **4.11 Keep raw docling output beside the Hebrew-fixed version.** The OCR-reversal fixer rewrites
@@ -332,21 +335,26 @@ output:
 
 ---
 
-## 7. What is stale in the design review
+## 7. The design review
 
-`docs/superpowers/specs/2026-08-16-ingest-pipeline-design-review.md` is the fuller write-up, but
-these parts are now out of date:
+`docs/superpowers/specs/2026-08-16-ingest-pipeline-design-review.md` is the fuller write-up.
+**Updated 2026-08-19** — it is no longer stale; it carries a status block at the top, per-item
+outcomes on every decision, and inline corrections where the original text has been overtaken:
 
-- **§2 / D2** — described as an open problem. It is **implemented and merged**.
-- **§4 D4** — recommends Git LFS. Superseded: the binaries were **deleted entirely**.
-- **§5** — states stages 5 and 6 are pure stdlib and the dependency surface is confined to stages 3
-  and 4. **Wrong now**: translation requires YAP.
-- **§3B I1** — the payload question is resolved (D3, monorepo).
-- Verdict tables and merge order throughout — all PRs are merged.
+- **§2 / D2** — resolved. The old at-least-once verification code is kept, marked as the problem
+  the masking fix solved.
+- **§4 D4** — the recommendation (LFS or vendoring) was *not* what happened; the binaries were
+  deleted outright. Noted, along with the LFS residue that outlived them by two months.
+- **§5** — carried a **wrong-in-the-dangerous-direction** claim, that stages 5 and 6 are pure
+  stdlib and need "only a reachable LLM endpoint". Implementing D2 made stage 5 fail closed
+  without YAP. Corrected in place, with a pointer to `ingest-pipeline/requirements.txt`.
+- **§3A / §3B / §8** — per-item status. M1, M7, I1, I2, I4, I6, I8, I10 resolved; M4 flagged as
+  the remaining P0; I7 marked partial (the module split landed, but `call_llm` still exists in
+  three copies — `translation_llm.py`, `translation_reviewer.py`, `classify/judge.py`).
+- **§7** — its priority grid is superseded by §8 of this document.
 
-- Any statement that a chunk failure aborts the document — fixed by PR #15, see §4.1.
-
-§6 (end-to-end testing) and §3A M3 (irreversible Hebrew fix) are still accurate and still open.
+Still accurate and still open there: **§6 (end-to-end testing)** and **§3A M3** (the irreversible
+Hebrew fix). Those two are the reason §5 of this handoff exists.
 
 ---
 
