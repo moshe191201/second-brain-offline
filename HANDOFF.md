@@ -155,7 +155,21 @@ Other deliberate limitations are documented in the `scripts/translation_checkpoi
 docstring (`base_url` is not part of the key; no retry backoff; orphaned `.tmp-*.json` files after
 a SIGKILL are never cleaned up).
 
-**4.2 Build and prove the offline dependency bundle.** *(Yoni — worst failure mode on the list)*
+**4.2 Build and prove the offline dependency bundle.** — **BUILT AND WORKING IN THE GAP
+(2026-08-19).** Yoni installed it inside the air gap and **stage 5 translation ran with YAP**.
+
+That clears the highest-risk unknown on the whole list. Stage 5 fails closed without the YAP
+stack, YAP is not pip-installable, and a wrong wheel or a missing model directory could only have
+been discovered on the far side. It wasn't.
+
+> **What is confirmed is stage 5 + YAP.** Whether stage 3 (docling + pandoc + the .NET OneNote
+> helper + markitdown), stage 4 (`wordfreq`, and `scikit-learn`/`numpy` for clustering) and
+> stage 6 (the embedding model) have all been exercised in the gap is **not yet reported**. Ask
+> Yoni before treating the whole bundle as proven — stage 3 has by far the largest and most
+> awkward dependency surface, and it is the stage that runs first on all 3,800 pages.
+
+The original requirements are kept below, since the bundle has to be rebuilt whenever
+`ingest-pipeline/requirements.txt` changes.
 
 Must be built **on Windows** — `pip download` on macOS fetches the wrong wheels, and you only find
 out on the far side of the gap.
@@ -175,6 +189,11 @@ Binaries/services: Python 3.12 · `pandoc` ≥3.0 · `docling-serve` + models (~
 Prove it: install from the bundle on a clean Windows machine **with networking disabled**, then run
 the smoke test in §5. An untested bundle is not a bundle. There is an `airgap-pack` skill that
 automates this.
+
+> Note `scikit-learn`+`numpy` are listed above as "optionally … drop if unused". They are **not**
+> optional if stage 4 subdomain clustering is wanted: without them `write_subdomain_keywords`
+> returns `num_clusters: 0` with the explanation buried in its output JSON and nothing on stderr.
+> Both are declared in `ingest-pipeline/requirements.txt`.
 
 ### P1 — Moshe, needs none of Yoni's time — **all done (PRs #16, #17)**
 
@@ -257,9 +276,9 @@ to declare no runtime dependencies.
   translated, not after N of them.
 - **4.10 Measure or drop the 20% kimi reviewer.** Second model through the gap, no evidence it
   catches anything the deterministic QA misses.
-- **4.11 Keep raw docling output beside the Hebrew-fixed version.** The OCR-reversal fixer rewrites
-  in place and keeps only a list of changed words. 3,800 pages are converted **once**. If the
-  dictionary is subtly wrong you cannot detect or reverse it later.
+- **4.11 Keep raw docling output beside the Hebrew-fixed version.** — **MOVED TO P0, see §8.**
+  No longer "worth doing, not urgent": the bundle works, so conversion is imminent, and this is
+  the one item whose cost rises with every page processed.
 
 ---
 
@@ -360,19 +379,36 @@ Hebrew fix). Those two are the reason §5 of this handoff exists.
 
 ## 8. If you do only one thing
 
-**§4.2 — build and prove the offline dependency bundle.** It is the only remaining item with a
-hard deadline, and the only one whose failure mode is discovered on the far side of the gap.
-It must be built **on Windows** (`pip download` on macOS resolves the wrong wheels), it must be
-proven by installing on a clean machine **with networking disabled**, and stage 5 now cannot run
-at all without the YAP stack. `ingest-pipeline/requirements.txt` is the pip surface; the
-non-pip pieces are listed in §4.2 and at the bottom of that file.
+**§4.11 / M3 — keep the raw docling output beside the Hebrew-fixed version.** *(Yoni, and it is
+now urgent rather than P2.)*
 
-§4.1 (checkpointing) and §4.5 (CI) — the two previous answers to this question — are done.
+The bundle works and Yoni is in the gap, which means **conversion is about to run, or is running,
+on all 3,800 pages — once.** `convert_to_md.py:593` does:
 
-> The very first Windows CI run is the moment to watch. Every pipeline test to date has only
-> ever run on macOS, so `pipeline.yml`'s gating job is the first real evidence the pipeline
-> works on the platform it ships on. Expect it to need attention rather than to be green.
+```python
+fixed, fix_report = hebrew_fix.fix_text(md, dictionary, margin=margin, ocr=ocr)
+```
 
-> Deps were installed on a Mac during the §4.1 work to get the suite fully green. Those are
-> **macOS arm64 wheels** (`pypdfium2-5.13.0-macosx_13_0_arm64`) — useful for local testing,
-> worth nothing toward §4.2.
+and only `fixed` is ever written. The raw docling `md` is discarded; all that survives is
+`fix_report`, a list of changed words. If the reversal dictionary is subtly wrong — one common
+word scored backwards — you cannot detect it afterwards and you cannot reverse it. The source
+PDFs are still there, but re-converting 3,800 pages means paying for docling, OCR and the .NET
+OneNote helper a second time, inside the gap.
+
+**This has exactly the property that made §4.1 the top item earlier: it gets more expensive with
+every document processed, and it costs almost nothing today.** Writing `<name>.raw.md` next to
+`<name>.md`, or a single `raw_md/.docling-raw/` tree, is a few lines in the one place the fixer
+is called.
+
+Everything else on this list can be fixed later at roughly the same cost.
+
+Runner-up: **§5 / M6 — the golden corpus and an end-to-end run.** Every stage has unit tests
+(42 framework + 194 pipeline, green on ubuntu/macos/windows), and *nothing* tests that the stages
+compose. `--mock` already runs the whole chain without a model, so a smoke tier is cheap.
+
+§4.1 (checkpointing), §4.5 (CI) and §4.2 (the bundle) — the three previous answers to this
+question — are done.
+
+> **Confirm the bundle's scope with Yoni.** What is reported working is stage 5 with YAP. Stage 3
+> carries the largest dependency surface (docling + models + tessdata, pandoc, the .NET OneNote
+> helper, markitdown) and it is the stage that runs first on everything.
