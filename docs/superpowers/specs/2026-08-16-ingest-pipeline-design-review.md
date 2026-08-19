@@ -18,9 +18,14 @@
 > boundary guards (#17). That resolves I1, I2, I4, I6, I8, I10, M1, M7 and the `example_vault`
 > staleness gap. §8's table carries the per-item status.
 >
-> **Still open, and now the top of the list: M4 — the air-gap bundle** (§5). It is the only
-> item whose failure is discovered on the far side of the gap. §6 (end-to-end testing) and
-> M3 (irreversible Hebrew fix) remain accurate and open.
+> **M4 — the air-gap bundle — is done.** Built and installed inside the gap on 2026-08-19, with
+> **stage 5 translation running against YAP**: the one dependency that fails closed, is not
+> pip-installable, and could only have been falsified on the far side. (Stage 3, 4 and 6
+> dependencies are not yet reported as exercised — see `HANDOFF.md` §4.2.)
+>
+> **The open item that now matters most is M3**, the irreversible Hebrew OCR fix, and it is
+> urgent for a new reason: the bundle working means conversion is imminent, and conversion
+> happens once for 3,800 pages. §6 (end-to-end testing) is the runner-up and still accurate.
 >
 > Current state and open work live in `HANDOFF.md`, which supersedes §7's priority grid.
 
@@ -101,8 +106,8 @@ scripts/translate.py:1189
 |---|---|---|
 | ~~M1~~ | ~~Glossary is verified, not enforced~~ | ✅ **resolved (D2, PR #9)** — deterministic masking, exact counts |
 | M2 | Glossary gate is all-or-nothing | one `proposed` row blocks *every* document; the tempting unblock is to mass-mark `approved`, which destroys the gate |
-| M3 | Hebrew OCR fix is irreversible | raw docling output is not kept beside the fixed file; 3,800 pages are converted **once**, in the gap |
-| **M4** | Air-gap dependency bundle unproven | **STILL OPEN — now the single highest priority.** See §5 and its correction. A missing wheel inside the gap is a full stop |
+| **M3** | Hebrew OCR fix is irreversible | **STILL OPEN — now the top item.** `convert_to_md.py:593` keeps only `fixed`; the raw docling markdown is discarded and only a list of changed words survives. 3,800 pages are converted **once**, in the gap, and the bundle now works |
+| ~~M4~~ | ~~Air-gap dependency bundle unproven~~ | ✅ **built and working in the gap (2026-08-19)** — stage 5 ran with YAP. Stages 3/4/6 not yet reported |
 | M5 | Windows-only is a docstring, not a contract | decision accepted (D1) — but nothing enforces or documents it outside one docstring in `hebrew_yap_stemmer.py` |
 | **M6** | Stages never run end to end | **STILL OPEN.** Every stage has unit tests (42 framework + 194 pipeline, green on ubuntu/macos/windows); nothing tests that the stages *compose*. See §6 |
 | ~~M7~~ | ~~No glossary collision detection~~ | ✅ **resolved** — `check_glossary_collisions` runs at mask time *and* at the gate (`check_glossary.py:89`), so a collision fails before any document is translated |
@@ -210,7 +215,11 @@ Yoni owns building and proving this bundle.
 >
 > The pip surface is now declared in `ingest-pipeline/requirements.txt` rather than in prose;
 > build the bundle from that file, **on Windows**, and note the non-pip pieces listed at the
-> bottom of it. Stage 4's `scikit-learn` + `numpy` are guarded at import but not optional in the
+> bottom of it.
+>
+> **Outcome: the bundle was built and works.** Installed inside the gap on 2026-08-19 with stage 5
+> translating against YAP — so the fail-closed dependency this correction is about did make it
+> across, and this section's original claim did not cost anything. Stage 4's `scikit-learn` + `numpy` are guarded at import but not optional in the
 > gap: without them subdomain clustering silently returns `num_clusters=0` with the explanation
 > buried in output JSON.
 
@@ -344,8 +353,8 @@ changes #4 three weeks from now with nobody watching.
 | ~~D5~~ | ~~Merge #12 then freeze scope~~ | Decision | — | — | ✅ **resolved: merged + frozen** |
 | ~~M1~~ | ~~Deterministic glossary substitution~~ | MVP | — | — | ✅ **done (PR #9)** |
 | M2 | Per-document glossary gate | MVP | Yoni | ~5 LOC | P1 |
-| M3 | Keep raw docling output beside fixed | MVP | Yoni | 0.5 d | **P0** |
-| **M4** | Offline bundle, built + proven on Windows | MVP | Yoni | 1 d | **P0 — now the top item** |
+| **M3** | Keep raw docling output beside fixed | MVP | Yoni | 0.5 d | **P0 — now the top item** |
+| ~~M4~~ | ~~Offline bundle, built + proven on Windows~~ | MVP | — | — | ✅ **done — works in the gap, stage 5 + YAP** |
 | M5 | Windows constraint: README + startup check | MVP | Yoni | 1 h | P1 |
 | M6 | One manual end-to-end run | MVP | Yoni | 2 h | **P0** |
 | ~~M7~~ | ~~Glossary collision detection~~ | MVP | — | — | ✅ **done** — at mask time and at the gate |
@@ -364,7 +373,8 @@ changes #4 three weeks from now with nobody watching.
 
 **P0 = settle or start before the month apart.**
 
-> **As of 2026-08-19:** every Decision is resolved and the only remaining **P0 is M4**, the
-> air-gap bundle. Two items were added by work done since and are tracked in `HANDOFF.md`
+> **As of 2026-08-19:** every Decision is resolved, M4 is done — the bundle works in the gap —
+> and the remaining **P0s are M3 and M6**: keep the raw docling output before 3,800 pages are
+> converted irreversibly, then get one end-to-end run. Two items were added by work done since and are tracked in `HANDOFF.md`
 > rather than here — chunk-level checkpointing (§4.1, fixes 1–2 shipped in PR #15; 3–5 still
 > gated on measuring the corpus page-size distribution) and pruning the chunk checkpoint store.
