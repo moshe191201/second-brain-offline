@@ -293,7 +293,7 @@ def cmd_upgrade(root: Path) -> int:
             removed.append(rel)
 
     _write_stamp(vault, name)
-    print(f"vault upgrade: {old_version} → {framework_version()}")
+    print(f"vault upgrade: {old_version} -> {framework_version()}")
     for rel in backups:
         print(f"  backed up (edited on disk): {BACKUP_DIR}/{old_version}/{rel}")
     for rel in removed:
@@ -328,7 +328,7 @@ def cmd_ingest(root: Path, raw_file: Path) -> int:
             + f'---\n\n# Summary — {title}\n\n'
             f'<!-- TODO: one-sentence thesis -->\n\n'
             f'<!-- TODO: ~200 words on what the source argues, grounded in [[{stem}]] -->\n\n'
-            f'## Key claims\n<!-- TODO: - claim → [[derived-concept-note]] -->\n\n'
+            f'## Key claims\n<!-- TODO: - claim -> [[derived-concept-note]] -->\n\n'
             f'## Derived concept notes\n<!-- TODO: [[note-a]] · [[note-b]] -->\n',
             encoding="utf-8")
     # 2. Registry row (idempotent).
@@ -503,7 +503,7 @@ def cmd_check(root: Path) -> int:
         failed = True
         print("vault check: unfilled stub / TODO marker in:", file=sys.stderr)
         for p in todos:
-            print(f"  - {p.relative_to(root)} → fill its <!-- TODO --> body from its source.",
+            print(f"  - {p.relative_to(root)} -> fill its <!-- TODO --> body from its source.",
                   file=sys.stderr)
 
     # Layer 3 — framework drift.

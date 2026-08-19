@@ -250,3 +250,49 @@ class TestExampleVaultIsCurrent(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConsoleOutputSurvivesLegacyWindowsEncoding(unittest.TestCase):
+    """The framework claims to be cross-platform. A Windows console defaults to
+    cp1252, and `print()` of a character outside that set raises
+    UnicodeEncodeError — killing the command, not just garbling a line.
+
+    `vault upgrade` printed U+2192 (RIGHTWARDS ARROW), which cp1252 has no
+    mapping for, so upgrade crashed on every Windows machine. It went unnoticed
+    because there was no Windows CI: the first run of the new matrix turned 8
+    tests red, 7 of them pre-existing.
+
+    Reproduced here on any platform by encoding to cp1252 explicitly, so the
+    guard holds even for developers who never touch Windows. Note the em dash,
+    bullet and en dash used elsewhere in the CLI ARE in cp1252 and are fine —
+    this is not a ban on non-ASCII, only on characters Windows cannot print.
+    """
+
+    def test_no_package_string_is_unprintable_on_a_windows_console(self):
+        offenders = []
+        for py in sorted(PKG.rglob("*.py")):
+            for lineno, line in enumerate(py.read_text(encoding="utf-8").splitlines(), 1):
+                for ch in dict.fromkeys(c for c in line if ord(c) > 127):
+                    try:
+                        ch.encode("cp1252")
+                    except UnicodeEncodeError:
+                        offenders.append(
+                            f"{py.relative_to(ROOT)}:{lineno} has U+{ord(ch):04X} {ch!r}")
+        self.assertEqual(offenders, [],
+                         "character cannot be printed on a cp1252 Windows console")
+
+    def test_upgrade_prints_cleanly_to_a_cp1252_stream(self):
+        # The behavioural half: exercises the real code path that crashed.
+        import contextlib
+        import io
+        import shutil
+        import tempfile
+        from second_brain_vault_framework import core
+
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / "example_vault"
+            shutil.copytree(ROOT / "example_vault", copy)
+            cp1252 = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+            with contextlib.redirect_stdout(cp1252):
+                rc = core.cmd_upgrade(copy)
+            self.assertEqual(rc, 0)
