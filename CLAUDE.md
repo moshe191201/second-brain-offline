@@ -53,8 +53,20 @@ Never edit a framework-owned file inside `example_vault/` directly. Edit it in
 vault upgrade example_vault
 ```
 
-CI enforces this: the `example-vault` stage runs `vault check example_vault` and fails if
-`vault upgrade` would produce a diff. A payload edit that isn't laid down is a broken build.
+`tests/test_boundary.py::TestExampleVaultIsCurrent` enforces this for every path in
+`owned_paths`: it upgrades a temp copy of `example_vault/` and fails if anything would change.
+An un-laid-down edit to an owned file is a broken build, and it fails in the suite — on your
+laptop, not in a consumer's repo.
+
+**Two payload files are exceptions**, because `cmd_upgrade` never re-lays them:
+`tests/VAULT_TESTS.md` (`scaffold_only_paths`) and `gitignore` (written directly by
+`cmd_scaffold`). Editing either does **not** reach existing vaults, and `vault upgrade` will
+not fix a stale one — only a fresh `vault scaffold` picks the change up.
+`test_every_payload_file_is_claimed_by_the_manifest` keeps that exception list explicit.
+
+> This was previously documented as CI-enforced and was not. The `example-vault` job ran
+> `git diff --exit-code` **without ever running `vault upgrade`**, so on a fresh checkout the
+> diff was always empty. The rule went unenforced for as long as it has been written down.
 
 Which paths are framework-owned is defined in `manifest.json` — nowhere else. Adding a file
 to the payload means adding it to `owned_paths` too, or `upgrade` will never install it.

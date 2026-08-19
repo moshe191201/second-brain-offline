@@ -1,0 +1,99 @@
+# Framework lane — second_brain_vault_framework.
+#
+# The framework must survive an air gap with nothing installed, so the test job
+# deliberately runs with NO pip install at all: PYTHONPATH=src and stdlib only.
+# If a runtime dependency ever creeps in, this job fails before the package one
+# does, and tests/test_boundary.py names the offending import.
+#
+# Nothing here knows the ingest pipeline exists. That is the point; see
+# .github/workflows/pipeline.yml for the other product.
+
+name: framework
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: framework-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # No `pip install` on purpose — see the header.
+      - name: Run framework suite with nothing installed
+        run: python -m unittest discover -s tests -v
+        env:
+          PYTHONPATH: src
+
+  packaging:
+    name: install + example_vault
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+
+      # example_vault/ is living documentation: it must always be the vault the
+      # *current* payload produces.
+      #
+      # The staleness check itself lives in tests/test_boundary.py, not here. It
+      # upgrades a temp COPY and compares: `.vault-framework.json` carries an
+      # `installed_at` wall-clock stamp rewritten on every upgrade, so the
+      # obvious `vault upgrade && git diff --exit-code` is red on every run
+      # whether or not anything drifted. As a test it also runs on a laptop,
+      # which is where a stale example should be caught.
+      - name: vault check
+        run: vault check example_vault
+
+      # Prove a fresh vault can actually be built end to end, not just linted.
+      - name: scaffold a fresh vault and lint it
+        run: |
+          mkdir -p /tmp/scaffold && cd /tmp/scaffold
+          vault scaffold V
+          vault check V
+
+  wheel:
+    name: wheel carries the payload
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build && python -m build
+      - name: payload made it into the wheel
+        run: |
+          python scripts/ci/check_wheel_payload.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/
+
+  docs:
+    name: mkdocs build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[docs]"
+      # --strict turns broken nav entries and dead internal links into failures.
+      # The nav references specs by path, so a moved doc breaks the site quietly.
+      - run: mkdocs build --strict --site-dir public

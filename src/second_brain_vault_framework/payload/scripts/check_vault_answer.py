@@ -102,7 +102,7 @@ def load_case(group: str, number: str) -> dict:
 
 
 def _backticked(cell: str) -> list[str]:
-    """Note stems named in a gold cell, e.g. '`lora` + `kv-cache`' → [lora, kv-cache]."""
+    """Note stems named in a gold cell, e.g. '`lora` + `kv-cache`' -> [lora, kv-cache]."""
     return re.findall(r"`([^`]+)`", cell)
 
 

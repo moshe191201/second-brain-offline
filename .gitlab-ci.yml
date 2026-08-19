@@ -36,14 +36,21 @@ pipeline-unit:
     - cd ingest-pipeline && python -m unittest discover -s tests -v
 
 # example_vault/ is living documentation: it must always be a valid vault built
-# by the *current* payload. If a payload change isn't laid down into it, the
-# stamp/drift check in `vault check` fails here and not in a consumer's repo.
+# by the *current* payload.
+#
+# `vault check` does NOT detect an un-laid-down payload edit — cmd_check only
+# compares the stamp's framework_version against the installed version, so it
+# exits 0 on a stale example. The staleness check is
+# tests/test_boundary.py::TestExampleVaultIsCurrent, run by the `unit` job.
 example-vault:
   stage: example
   script:
     - vault check example_vault
-    - git diff --exit-code example_vault
-      || (echo "example_vault is stale — run 'vault upgrade example_vault' and commit." && exit 1)
+    # The staleness check used to live here as `git diff --exit-code`, which
+    # never ran `vault upgrade` first — so on a fresh checkout the diff was
+    # always empty and the job could not detect a stale example. It is now
+    # tests/test_boundary.py::TestExampleVaultIsCurrent, run by the `unit` job.
+
 
 wheel:
   stage: build
@@ -51,7 +58,7 @@ wheel:
     - pip install build
     - python -m build
     # Prove the payload actually made it into the wheel.
-    - python -c "import zipfile,glob,sys; n=[f for f in zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist() if '/payload/' in f]; print(len(n),'payload files'); sys.exit(0 if len(n)>=8 else 1)"
+    - python scripts/ci/check_wheel_payload.py
   artifacts:
     paths: [dist/]
     expire_in: 1 month

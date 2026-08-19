@@ -2162,7 +2162,9 @@ git add -A src/second_brain_vault_framework/payload/scripts/census tests/test_ce
 - Modify: `docs/superpowers/specs/2026-08-09-conversion-defect-census-and-router-design.md`
 - Generated: `example_vault/scripts/census/**`
 
-Adding payload files without registering them in `owned_paths` means `scaffold` and `upgrade` silently ignore them — the file would never reach a vault. CI's `example-vault` stage then fails if the payload was not laid down.
+Adding payload files without registering them in `owned_paths` means `scaffold` and `upgrade` silently ignore them — the file would never reach a vault.
+
+> **Correction (2026-08-18).** This said CI's `example-vault` stage catches it. It did not: that stage ran `git diff --exit-code` without ever running `vault upgrade`, so on a fresh checkout the diff was always empty. Both cases are now covered by `tests/test_boundary.py` — `TestExampleVaultIsCurrent` for un-laid-down edits and `test_every_payload_file_is_claimed_by_the_manifest` for unregistered payload files.
 
 - [ ] **Step 1: Write the failing test**
 
