@@ -60,14 +60,15 @@ Verification on `main` right now:
 PYTHONPATH=src python3 -m second_brain_vault_framework.cli check example_vault
 # VAULT LINT: OK — no findings  [43 notes checked]
 
-PYTHONPATH=src python3 -m unittest discover -s tests
-# with the pipeline deps installed:  Ran 222 tests — OK (skipped=2)
-# on a bare checkout:                Ran 155 tests — FAILED (errors=6)
+PYTHONPATH=src python3 -m unittest discover -s tests        # framework
+# Ran 42 tests — OK          <- needs NOTHING installed
+
+cd ingest-pipeline && python3 -m unittest discover -s tests  # pipeline
+# Ran 194 tests — OK (skipped=2)   <- needs requirements.txt; skips are YAP
 ```
 
-**The 6 errors on a bare checkout are missing dependencies, not defects** — but read §6.2
-before trusting that sentence, because they are not 6 failing tests, they are 6 test *modules*
-that never import, hiding 67 tests. The 2 skips are the YAP-dependent cases skipping cleanly.
+Both suites are green on all of ubuntu/macos/windows x py3.11/3.12 in CI. The old
+"6 modules fail to import and 67 tests silently vanish" trap is gone with the split (§4.4).
 
 **The headline win:** glossary handling went from "inject into the prompt, then check the English
 appears *somewhere* in the document" (at-least-once, document-wide — a term translated right once
@@ -173,25 +174,37 @@ Prove it: install from the bundle on a clean Windows machine **with networking d
 the smoke test in §5. An untested bundle is not a bundle. There is an `airgap-pack` skill that
 automates this.
 
-### P1 — Moshe, needs none of Yoni's time
+### P1 — Moshe, needs none of Yoni's time — **all done (PRs #16, #17)**
 
-**4.3 Remove the vestigial Git LFS setup.** `.gitattributes` still tracks `deps/yap/**`, which
-exists in no branch (D4 deleted them). Worse, a `git-lfs` **post-checkout hook silently aborts
-checkouts and merges** when git-lfs isn't installed — it silently killed a merge during review and
-nearly caused stale test numbers to be reported as fresh ones. On the air-gap machine this is pure
-friction for zero benefit. Delete both the rule and the hook.
+**4.3 Remove the vestigial Git LFS setup.** — **DONE (PR #16)**. `.gitattributes` is deleted
+(verified: zero objects matching `deps/yap` in any ref), and the local `filter.lfs` config — whose
+`required = true` is what hard-fails a checkout — is gone.
 
-**4.4 Implement the D3 test split.** `python3 -m unittest discover -s tests` — the gate named in
-`CLAUDE.md` — needs `wordfreq==3.1.1`, `pypdfium2`, `vsdx`, `python-docx`, `python-pptx`,
-`beautifulsoup4`, `extract_msg`, `markitdown` and `PyYAML`. Pipeline tests belong in their own
-directory with their own CI lane. Every stage that lands makes this migration bigger.
+> **The four hooks are NOT fixed by the merge.** `.git/hooks/` is not version-controlled, so every
+> clone gets them again from whoever ran `git lfs install`. They `exit 2` when git-lfs is absent,
+> which is the silent merge/checkout abort in §6.3. On a fresh clone, run:
+>
+> ```bash
+> rm -f .git/hooks/post-checkout .git/hooks/post-commit .git/hooks/post-merge .git/hooks/pre-push
+> ```
 
-Measured 2026-08-18: on a bare checkout **6 test modules fail to import and 67 tests never run**,
-while `discover` still prints `Ran 155 tests`, which reads like full coverage. Those 67 cover
-stages 3 and 4 — the stages Yoni is about to depend on. Installing the deps takes it to
-`Ran 222 tests — OK (skipped=2)`. Until the split lands, `f0d3d1e`'s pattern (skip with a
-remediation message instead of failing to import) is the cheap partial fix, and it is already
-proven on the YAP-dependent tests — those are the 2 clean skips.
+**4.4 Implement the D3 test split.** — **DONE (PR #16)**, and it went further than a test split:
+the pipeline is now its own product at `ingest-pipeline/` with its own `scripts/`, `tests/`,
+`templates/`, `skills/`, `data/` and `requirements.txt`.
+
+```bash
+python3 -m unittest discover -s tests                      # framework: 42, needs NOTHING installed
+cd ingest-pipeline && python3 -m unittest discover -s tests # pipeline: 194, needs requirements.txt
+```
+
+The framework gate no longer needs a single package, so the old failure — 6 modules failing to
+import and 67 tests silently not running behind a plausible-looking `Ran 155 tests` — cannot
+recur: those modules live in the other suite now, and a failed install there turns the pipeline
+lane red rather than quietly shrinking the count.
+
+`manifest.json` went 25 -> 8 owned paths; a freshly scaffolded vault is 15 files with zero trace
+of the pipeline. `core.cmd_classify` moved to `ingest-pipeline/scripts/classify/validate.py` and
+`vault classify` is gone from the CLI.
 
 **4.5 Set up GitHub Actions CI.** — **DONE (PR #17)**. Two workflows: `framework.yml`
 (ubuntu/macos/windows x py3.11/3.12, running the suite with **nothing installed** so the
@@ -214,10 +227,18 @@ Two things that surfaced while building it, both now fixed:
   Several docs claimed otherwise. Two lanes: framework (cross-platform,
 pure stdlib) and pipeline (Windows runner, full deps).
 
-**4.6 Update `CLAUDE.md`.** It still opens *"This repo is the framework, not a vault"* and states a
-repo-wide **"Pure stdlib"** rule. Under D3 that rule must be **scoped to the vault framework only** —
-the pipeline legitimately depends on ~11 packages. A fresh agent reading `CLAUDE.md` today will
-conclude the pipeline is broken.
+**4.6 Update `CLAUDE.md`.** — **DONE (PR #16)**. Both halves:
+
+- It no longer opens *"This repo is the framework, not a vault"*. It is now
+  `# CLAUDE.md — Monorepo`, leading with a table of the two products and the rule that they do
+  not import each other.
+- The repo-wide **"Pure stdlib"** rule is scoped: *"Pure stdlib — the framework only"*, with an
+  explicit note that it does **not** apply to `ingest-pipeline/`, whose ~11 packages live in
+  `ingest-pipeline/requirements.txt` and never in `pyproject.toml`.
+
+`tests/test_boundary.py` (PR #17) now enforces both claims rather than leaving them as prose:
+the package and its tests are asserted to import stdlib only, and `pyproject.toml` is asserted
+to declare no runtime dependencies.
 
 ### P2 — worth doing, not urgent
 
@@ -283,13 +304,15 @@ output:
 
 ## 6. Gotchas a fresh session will hit
 
-1. **`PYTHONPATH=src` is required.** Without it, `second_brain_vault_framework` resolves through an
-   editable install pointing at another checkout and ~7 classification tests fail on missing
-   template paths. **Not a real failure.**
-2. **The 6 test errors on a bare `main` are environment, not defects** — but they are not 6
-   failing tests. They are 6 *modules* that never import (`unittest.loader._FailedTest`), hiding
-   67 tests across stages 3 and 4. `Ran 155 tests` looks like a full run and is not one. Install
-   the pipeline deps to get the real number (222). Any *other* failure is real.
+1. **`PYTHONPATH=src` is required for the framework suite.** Without it,
+   `second_brain_vault_framework` may resolve through an editable install pointing at another
+   checkout. **Not a real failure.** The pipeline suite does not need it — run it from
+   `ingest-pipeline/`, which puts `scripts/` on the path itself.
+2. **Run the right suite from the right directory.** `discover -s tests` at the repo root now
+   runs the *framework* only (42 tests, no dependencies). The pipeline's 194 live in
+   `ingest-pipeline/tests/`. Before the split a bare checkout printed `Ran 155 tests` while 6
+   modules silently failed to import and 67 tests never ran; that trap is gone, but a green
+   framework run is no longer evidence the pipeline is healthy.
 3. **git-lfs hook aborts merges.** If a merge or worktree checkout behaves oddly, use
    `git -c core.hooksPath=/dev/null`. Always confirm a test-merge actually applied
    (`test -f .git/MERGE_HEAD`) before trusting test output — a silently-aborted merge yields
