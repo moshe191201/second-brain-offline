@@ -35,11 +35,11 @@ from pathlib import Path
 
 # Shared helpers (deduped) — translation_common is single source of truth
 try:
-    from translation_common import read_csv_lines_skip_comments as _shared_read_csv, strip_frontmatter as _shared_strip_fm, split_table_cells as _shared_split_cells
+    from .translation_common import read_csv_lines_skip_comments as _shared_read_csv, strip_frontmatter as _shared_strip_fm, split_table_cells as _shared_split_cells
     _USE_SHARED = True
 except ImportError:
     try:
-        from scripts.translation_common import read_csv_lines_skip_comments as _shared_read_csv, strip_frontmatter as _shared_strip_fm, split_table_cells as _shared_split_cells
+        from .translation_common import read_csv_lines_skip_comments as _shared_read_csv, strip_frontmatter as _shared_strip_fm, split_table_cells as _shared_split_cells
         _USE_SHARED = True
     except ImportError:
         _USE_SHARED = False
@@ -334,7 +334,7 @@ def verify_ordered(source_items: list[str], translation: str) -> list[str]:
 
 
 def check_glossary_sentinel(body: str, term_map: list[dict]) -> dict:
-    from translation_common import build_glossary_sentinel, build_keep_sentinel
+    from .translation_common import build_glossary_sentinel, build_keep_sentinel
 
     violations: list[str] = []
     for e in term_map:

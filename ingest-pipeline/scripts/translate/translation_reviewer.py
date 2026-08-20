@@ -39,11 +39,11 @@ from pathlib import Path
 
 # Shared helpers — translation_common is single source of truth
 try:
-    from translation_common import read_csv_lines_skip_comments as _shared_read_csv, strip_frontmatter as _shared_strip_fm
+    from .translation_common import read_csv_lines_skip_comments as _shared_read_csv, strip_frontmatter as _shared_strip_fm
     _USE_SHARED = True
 except ImportError:
     try:
-        from scripts.translation_common import read_csv_lines_skip_comments as _shared_read_csv, strip_frontmatter as _shared_strip_fm
+        from .translation_common import read_csv_lines_skip_comments as _shared_read_csv, strip_frontmatter as _shared_strip_fm
         _USE_SHARED = True
     except ImportError:
         _USE_SHARED = False

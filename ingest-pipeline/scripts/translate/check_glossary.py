@@ -19,10 +19,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-try:
-    from translation_common import strip_csv_comments
-except ImportError:
-    from scripts.translation_common import strip_csv_comments
+from .translation_common import strip_csv_comments
 import sys
 from pathlib import Path
 
@@ -76,15 +73,7 @@ def check_glossary(path: Path) -> tuple[bool, list[str]]:
         errors.extend(unapproved)
     # Gate glossary collisions before any work starts (fail before N docs translated)
     # Always check collisions even if other errors exist, so reviewer sees all blockers.
-    # Fail-closed if checker unavailable (broken install / PYTHONPATH).
-    try:
-        from translation_common import check_glossary_collisions
-    except ImportError:
-        try:
-            from scripts.translation_common import check_glossary_collisions
-        except ImportError as e:
-            errors.append(f"glossary collision check unavailable (broken install): {e}")
-            return len(errors) == 0, errors
+    from .translation_common import check_glossary_collisions
     try:
         check_glossary_collisions(rows)
     except RuntimeError as e:

@@ -38,11 +38,6 @@ except ImportError:
     print("ERROR: wordfreq 3.1.1 required — pip install wordfreq==3.1.1", file=sys.stderr)
     sys.exit(1)
 
-# Ensure scripts/ is on path for sibling imports (needed when imported via tests)
-_scripts_dir = os.path.dirname(os.path.abspath(__file__))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
-
 import hebrew_yap_stemmer as _hys  # noqa: E402 — needed for _strip_hb_suffix
 
 # YAP — hard dependency, checked lazily in scan_corpus() so that importing

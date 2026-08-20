@@ -28,12 +28,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-try:
-    from translation_common import strip_csv_comments
-    from translation_common import read_csv_lines_skip_comments
-except ImportError:
-    from scripts.translation_common import strip_csv_comments
-    from scripts.translation_common import read_csv_lines_skip_comments
+from .translation_common import read_csv_lines_skip_comments, strip_csv_comments
 import hashlib
 import json
 import os
@@ -42,12 +37,6 @@ import sys
 import urllib.request
 import urllib.error
 from pathlib import Path
-
-# Allow running as scripts/glossary_translate.py
-_scripts_dir = os.path.dirname(os.path.abspath(__file__))
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
-
 
 def load_config(vault_root: Path) -> dict:
     path = vault_root / "convert_config.json"

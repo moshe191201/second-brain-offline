@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 class TestTranslationCommon(unittest.TestCase):
     def test_common_has_sentinel_helpers(self):
-        from translation_common import GLOSSARY_SENTINEL_RE, build_glossary_sentinel, parse_glossary_sentinel, check_glossary_collisions
+        from translate.translation_common import GLOSSARY_SENTINEL_RE, build_glossary_sentinel, parse_glossary_sentinel, check_glossary_collisions
         self.assertIsNotNone(GLOSSARY_SENTINEL_RE.search("⟦EN:0:Information Security⟧"))
         self.assertEqual(build_glossary_sentinel(0, "Information Security"), "⟦EN:0:Information Security⟧")
         self.assertEqual(parse_glossary_sentinel("⟦EN:0:Information Security⟧"), (0, "Information Security"))
@@ -21,8 +21,8 @@ class TestTranslationCommon(unittest.TestCase):
 class TestMaskGlossaryTerms(unittest.TestCase):
     def test_mask_simple_and_spacing(self):
         import unittest.mock as mock
-        import translate
-        with mock.patch("translate._yap_root_keys", side_effect=lambda toks: toks):
+        import translate.translate as translate
+        with mock.patch("translate.translate._yap_root_keys", side_effect=lambda toks: toks):
             rows = [{"term_he": "אבטחת מידע", "english": "Information Security", "status": "approved"}]
             masked, term_map = translate.mask_glossary_terms("באבטחת מידע חשובה", rows)
             self.assertIn("⟦EN:0:Information Security⟧", masked)
@@ -31,12 +31,12 @@ class TestMaskGlossaryTerms(unittest.TestCase):
 
     def test_mask_hDBim_mixed_with_suffix(self):
         import unittest.mock as mock
-        import translate
+        import translate.translate as translate
         def fake_roots(toks):
             mapping = {"הDBים": "DB", "המערכות": "מערכת", "מערכות": "מערכת", "מערכת": "מערכת", "DB": "DB"}
             return [mapping.get(t, t) for t in toks]
-        with mock.patch("translate._yap_root_keys", side_effect=fake_roots):
-            with mock.patch("translate._yap_analyze", return_value=[("הDBים", "DB", "ה", "ים")]):
+        with mock.patch("translate.translate._yap_root_keys", side_effect=fake_roots):
+            with mock.patch("translate.translate._yap_analyze", return_value=[("הDBים", "DB", "ה", "ים")]):
                 rows = [{"term_he": "DB", "english": "DB", "status": "approved"}]
                 masked, term_map = translate.mask_glossary_terms("הDBים קרסו", rows)
                 self.assertTrue("ה ⟦EN:0:DB⟧ ים" in masked or "ה ⟦EN:0:DB⟧" in masked, f"masked={masked!r}")
@@ -44,12 +44,12 @@ class TestMaskGlossaryTerms(unittest.TestCase):
 
     def test_mask_hamaarachot_plural(self):
         import unittest.mock as mock
-        import translate
+        import translate.translate as translate
         def fake_roots(toks):
             m = {"המערכות": "מערכת", "מערכות": "מערכת", "מערכת": "מערכת"}
             return [m.get(t, t) for t in toks]
-        with mock.patch("translate._yap_root_keys", side_effect=fake_roots):
-            with mock.patch("translate._yap_analyze", return_value=[("המערכות", "מערכת", "ה", "ות")]):
+        with mock.patch("translate.translate._yap_root_keys", side_effect=fake_roots):
+            with mock.patch("translate.translate._yap_analyze", return_value=[("המערכות", "מערכת", "ה", "ות")]):
                 rows = [{"term_he": "מערכת", "english": "system", "status": "approved"}]
                 masked, term_map = translate.mask_glossary_terms("המערכות פועלות", rows)
                 self.assertIn("⟦EN:0:system⟧", masked)
@@ -58,8 +58,8 @@ class TestMaskGlossaryTerms(unittest.TestCase):
 
     def test_mask_longest_match_wins(self):
         import unittest.mock as mock
-        import translate
-        with mock.patch("translate._yap_root_keys", side_effect=lambda toks: toks):
+        import translate.translate as translate
+        with mock.patch("translate.translate._yap_root_keys", side_effect=lambda toks: toks):
             rows = [
                 {"term_he": "מידע", "english": "information", "status": "approved"},
                 {"term_he": "אבטחת מידע", "english": "Information Security", "status": "approved"},
@@ -70,8 +70,8 @@ class TestMaskGlossaryTerms(unittest.TestCase):
 
     def test_mask_yap_missing_fail_closed(self):
         import unittest.mock as mock
-        import translate
-        with mock.patch("translate._yap_root_keys", side_effect=FileNotFoundError("yap.exe not found")):
+        import translate.translate as translate
+        with mock.patch("translate.translate._yap_root_keys", side_effect=FileNotFoundError("yap.exe not found")):
             rows = [{"term_he": "מערכת", "english": "system", "status": "approved"}]
             try:
                 translate.mask_glossary_terms("מערכת", rows)
@@ -97,8 +97,8 @@ def _ensure_person_names(vault: Path) -> None:
 
 class TestDeterministicMasking(unittest.TestCase):
     def test_unmask_deterministic_via_sentinels(self):
-        import translate
-        from translation_common import build_glossary_sentinel, build_keep_sentinel
+        import translate.translate as translate
+        from translate.translation_common import build_glossary_sentinel, build_keep_sentinel
 
         # EN sentinel unmask
         term_map = [{"id": 0, "term_he": "אבטחת מידע", "english": "Information Security", "keep_source": False, "occurrences": 1}]
@@ -116,8 +116,8 @@ class TestDeterministicMasking(unittest.TestCase):
         assert translate.unmask_glossary_terms(llm_keep, keep_map) == "Keep שבת as is"
 
     def test_unmask_and_ledger_fields(self):
-        import translate
-        from translation_common import compute_glossary_version
+        import translate.translate as translate
+        from translate.translation_common import compute_glossary_version
 
         # --- unmask unit ---
         term_map = [{"id": 0, "term_he": "אבטחת מידע", "english": "Information Security", "keep_source": False, "occurrences": 1}]
@@ -147,7 +147,7 @@ class TestDeterministicMasking(unittest.TestCase):
                 encoding="utf-8",
             )
             # Mock YAP so masking succeeds without binary; tolerate qa_failed exit(1)
-            with _mock.patch("translate._yap_root_keys", side_effect=lambda toks: toks):
+            with _mock.patch("translate.translate._yap_root_keys", side_effect=lambda toks: toks):
                 try:
                     translate.main([str(vault), "--mock"])
                 except SystemExit as e:
@@ -181,7 +181,7 @@ class TestDeterministicMasking(unittest.TestCase):
                         assert "term_he" in first and "english" in first and "occurrences" in first
 
     def test_e2e_mock_deterministic_with_fixtures(self):
-        import translate, json, pathlib, re
+        import translate.translate as translate, json, pathlib, re
         import unittest.mock as mock
         with _tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -235,8 +235,8 @@ class TestDeterministicMasking(unittest.TestCase):
                         out.append((t, t, "", ""))
                 return out
 
-            with mock.patch("translate._yap_root_keys", side_effect=fake_roots):
-                with mock.patch("translate._yap_analyze", side_effect=fake_analyze):
+            with mock.patch("translate.translate._yap_root_keys", side_effect=fake_roots):
+                with mock.patch("translate.translate._yap_analyze", side_effect=fake_analyze):
                     try:
                         translate.main([str(vault), "--mock"])
                     except SystemExit as e:
@@ -303,7 +303,7 @@ class TestYamlGuard(unittest.TestCase):
         for _mod in ("docling_convert", "hebrew_fix", "onenote_conversion", "vsdx_conversion"):
             if _mod not in _sys.modules:
                 _sys.modules[_mod] = type(_sys)(_mod)
-        import convert_to_md as cmod
+        import convert.convert_to_md as cmod
         orig_yaml = cmod.yaml
         try:
             cmod.yaml = None

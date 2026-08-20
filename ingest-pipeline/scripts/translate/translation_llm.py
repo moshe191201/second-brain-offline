@@ -12,13 +12,13 @@ import time
 import urllib.error
 import urllib.request
 
-from translation_invariants import HE_MARKER_FMT, HEBREW_WORD_RE
-from translation_masking import mask_glossary_terms, unmask_glossary_terms
+from .translation_invariants import HE_MARKER_FMT, HEBREW_WORD_RE
+from .translation_masking import mask_glossary_terms, unmask_glossary_terms
 
 
 def _mock_with_sentinels(masked_text: str, term_map: list[dict], invariants: dict | None = None) -> str:
     """Simulate LLM preserving sentinels: wrap Hebrew outside protected spans."""
-    from translation_common import build_glossary_sentinel, build_keep_sentinel
+    from .translation_common import build_glossary_sentinel, build_keep_sentinel
 
     protected: list[str] = []
     if invariants:
@@ -118,7 +118,7 @@ def call_llm(base_url: str, api_key: str, model: str, prompt: str, retries: int 
 
 def mock_translate(chunk_text: str, glossary_rows: list[dict], invariants: dict | None = None) -> dict:
     # Deterministic mock via masking reuse: mask → simulate LLM (Hebrew wrapping, sentinels preserved) → unmask
-    from translation_common import build_glossary_sentinel, build_keep_sentinel
+    from .translation_common import build_glossary_sentinel, build_keep_sentinel
 
     try:
         masked, term_map = mask_glossary_terms(chunk_text, glossary_rows)

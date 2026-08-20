@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from translation_common import build_glossary_sentinel, build_keep_sentinel, check_glossary_collisions
+from .translation_common import build_glossary_sentinel, build_keep_sentinel, check_glossary_collisions
 
 # ---------------------------------------------------------------------------
 # YAP integration — lazy, fail-closed (Task 2: deterministic masking)
@@ -208,7 +208,7 @@ def mask_glossary_terms(chunk_text: str, glossary_rows: list[dict]) -> tuple[str
     Longest match wins; overlap skipped.
     Fail-closed if YAP missing.
     """
-    from translation_common import build_glossary_sentinel, build_keep_sentinel, check_glossary_collisions
+    from .translation_common import build_glossary_sentinel, build_keep_sentinel, check_glossary_collisions
 
     check_glossary_collisions(glossary_rows)
 
@@ -425,7 +425,7 @@ def mask_glossary_terms(chunk_text: str, glossary_rows: list[dict]) -> tuple[str
     term_map = sorted(term_map_dict.values(), key=lambda x: (x["src_order"], x["id"]))
 
     # Build id -> sentinel map
-    from translation_common import build_glossary_sentinel, build_keep_sentinel
+    from .translation_common import build_glossary_sentinel, build_keep_sentinel
 
     id_to_sentinel: dict[int, str] = {}
     for e in term_map:
@@ -482,7 +482,7 @@ def mask_glossary_terms(chunk_text: str, glossary_rows: list[dict]) -> tuple[str
 
 
 def unmask_glossary_terms(text: str, term_map: list[dict]) -> str:
-    from translation_common import build_glossary_sentinel, build_keep_sentinel
+    from .translation_common import build_glossary_sentinel, build_keep_sentinel
 
     # Fail-closed: every sentinel must be present exactly occurrences times before replacement
     for e in term_map:
